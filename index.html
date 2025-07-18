@@ -687,7 +687,11 @@
         
         // データ処理
         function processData(data) {
-            allData = data;
+            // 既存データに新しいデータを追加（重複を避けるため）
+            const existingKeys = new Set(allData.map(row => `${row['日付']}_${row['患者番号']}`));
+            const newData = data.filter(row => !existingKeys.has(`${row['日付']}_${row['患者番号']}`));
+            allData = [...allData, ...newData];
+            
             analyzeData();
             showLoading(false);
             
@@ -1826,6 +1830,12 @@
             // 日付範囲
             const startMonth = document.getElementById('startMonth').value;
             const endMonth = document.getElementById('endMonth').value;
+            
+            if (!startMonth || !endMonth) {
+                showError('期間を選択してください');
+                return;
+            }
+            
             const [startYear, startMon] = startMonth.split('-');
             const [endYear, endMon] = endMonth.split('-');
             
@@ -1910,6 +1920,11 @@
             // 日付範囲を取得
             const startMonth = document.getElementById('startMonth').value;
             const endMonth = document.getElementById('endMonth').value;
+            
+            if (!startMonth || !endMonth) {
+                showError('期間を選択してください');
+                return;
+            }
             
             // サマリーシート作成
             const summaryData = [];
@@ -2006,6 +2021,12 @@
             // 日付範囲
             const startMonth = document.getElementById('startMonth').value;
             const endMonth = document.getElementById('endMonth').value;
+            
+            if (!startMonth || !endMonth) {
+                showError('期間を選択してください');
+                return;
+            }
+            
             const [startYear, startMon] = startMonth.split('-');
             const [endYear, endMon] = endMonth.split('-');
             
