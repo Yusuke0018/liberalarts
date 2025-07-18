@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>2024年8月問題デバッグ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>2024年8月純初診問題デバッグ</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <pre id="output" style="background: #f4f4f4; padding: 20px;"></pre>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                Papa.parse(text, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        analyzeAugust(results.data);
+                    }
+                });
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+        
+        function analyzeAugust(data) {
+            const output = document.getElementById('output');
+            let html = '';
+            
+            // 月別データを集計
+            const monthlyData = {};
+            
+            data.forEach(row => {
+                if (!row['日付'] || !row['初診・再診']) return;
+                
+                const date = new Date(row['日付']);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = {
+                        firstVisits: [],
+                        maxPatientNumber: 0
+                    };
+                }
+                
+                if (row['初診・再診'] === '初診') {
+                    monthlyData[monthKey].firstVisits.push(row['患者番号']);
+                }
+                
+                if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
+                    monthlyData[monthKey].maxPatientNumber = row['患者番号'];
+                }
+            });
+            
+            // 6月、7月、8月のデータを確認
+            const months = ['2024-06', '2024-07', '2024-08'];
+            let previousMax = 0;
+            
+            html += '=== 月別境界計算 ===\n\n';
+            
+            months.forEach((month, idx) => {
+                if (monthlyData[month]) {
+                    const boundary = idx === 0 ? 0 : previousMax + 1;
+                    const firstVisits = monthlyData[month].firstVisits.sort((a, b) => a - b);
+                    const pure = firstVisits.filter(n => n >= boundary);
+                    const re = firstVisits.filter(n => n < boundary);
+                    
+                    html += `${month}:\n`;
+                    html += `  前月最大: ${previousMax}\n`;
+                    html += `  境界: ${boundary}\n`;
+                    html += `  当月最大: ${monthlyData[month].maxPatientNumber}\n`;
+                    html += `  初診総数: ${firstVisits.length}\n`;
+                    html += `  患者番号範囲: ${Math.min(...firstVisits)} - ${Math.max(...firstVisits)}\n`;
+                    html += `  純初診(>=${boundary}): ${pure.length}件\n`;
+                    html += `  再初診(<${boundary}): ${re.length}件\n`;
+                    
+                    if (month === '2024-08') {
+                        html += `\n  8月の詳細:\n`;
+                        html += `  8985以上: ${pure.filter(n => n >= 8985).length}件\n`;
+                        html += `  最初の純初診番号: ${pure.slice(0, 10).join(', ')}...\n`;
+                        html += `  最初の再初診番号: ${re.slice(0, 10).join(', ')}...\n`;
+                    }
+                    
+                    html += '\n';
+                    previousMax = monthlyData[month].maxPatientNumber;
+                }
+            });
+            
+            output.textContent = html;
+        }
+    </script>
+</body>
+</html>
