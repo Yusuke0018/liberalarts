@@ -722,24 +722,29 @@
                 wardChartInstance = null;
             }
             
-            Papa.parse(file, {
-                header: true,
-                encoding: 'Shift-JIS',
-                dynamicTyping: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    try {
-                        processData(results.data);
-                    } catch (error) {
-                        showError('データの処理中にエラーが発生しました: ' + error.message);
+            // FileReaderを使ってUTF-8として読み込む
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                Papa.parse(text, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        try {
+                            processData(results.data);
+                        } catch (error) {
+                            showError('データの処理中にエラーが発生しました: ' + error.message);
+                            showLoading(false);
+                        }
+                    },
+                    error: function(error) {
+                        showError('ファイルの読み込みに失敗しました: ' + error.message);
                         showLoading(false);
                     }
-                },
-                error: function(error) {
-                    showError('ファイルの読み込みに失敗しました: ' + error.message);
-                    showLoading(false);
-                }
-            });
+                });
+            };
+            reader.readAsText(file, 'UTF-8');
         }
         
         // データ処理
