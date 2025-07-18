@@ -7,7 +7,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <!-- Removed date-fns as it was causing module export errors -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -744,6 +744,12 @@
         
         // データ処理
         function processData(data) {
+            // デバッグ: 最初の行のキーを確認
+            if (data.length > 0) {
+                console.log('CSVの列名:', Object.keys(data[0]));
+                console.log('最初のデータ行:', data[0]);
+            }
+            
             // 既存データに新しいデータを追加（重複を避けるため）
             const existingKeys = new Set(allData.map(row => `${row['日付']}_${row['患者番号']}`));
             const newData = data.filter(row => !existingKeys.has(`${row['日付']}_${row['患者番号']}`));
@@ -784,10 +790,14 @@
             let processedCount = 0;
             let errorCount = 0;
             
-            allData.forEach(row => {
+            allData.forEach((row, index) => {
                 try {
                     if (!row['日付'] || !row['初診・再診']) {
                         errorCount++;
+                        if (index < 5) { // 最初の5行だけデバッグ出力
+                            console.log(`エラー行 ${index}:`, row);
+                            console.log(`日付: ${row['日付']}, 初診・再診: ${row['初診・再診']}`);
+                        }
                         return;
                     }
                     
