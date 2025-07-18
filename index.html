@@ -781,52 +781,54 @@
             monthlyData = {};
             
             // 月ごとにグループ化
+            let processedCount = 0;
+            let errorCount = 0;
+            
             allData.forEach(row => {
-                if (!row['日付'] || !row['初診・再診']) return;
-                
-                // Parse date string (handle both YYYY/MM/DD and YYYY-MM-DD formats)
-                const dateStr = row['日付'];
-                let monthKey;
-                
-                if (dateStr.includes('/')) {
-                    const parts = dateStr.split('/');
-                    if (parts.length >= 2) {
-                        monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                try {
+                    if (!row['日付'] || !row['初診・再診']) {
+                        errorCount++;
+                        return;
                     }
-                } else if (dateStr.includes('-')) {
-                    const parts = dateStr.split('-');
-                    if (parts.length >= 2) {
-                        monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                    
+                    const date = new Date(row['日付']);
+                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    
+                    if (!monthKey || monthKey.includes('NaN')) {
+                        errorCount++;
+                        console.error('無効な日付:', row['日付']);
+                        return;
                     }
-                } else {
-                    // Fallback to Date constructor
-                    const date = new Date(dateStr);
-                    monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                }
-                
-                if (!monthKey || monthKey.includes('NaN')) return;
-                
-                if (!monthlyData[monthKey]) {
-                    monthlyData[monthKey] = {
-                        allRecords: [],
-                        firstVisits: [],
-                        returnVisits: [],
-                        maxPatientNumber: 0
-                    };
-                }
-                
-                monthlyData[monthKey].allRecords.push(row);
-                
-                if (row['初診・再診'] === '初診') {
-                    monthlyData[monthKey].firstVisits.push(row);
-                } else if (row['初診・再診'] === '再診') {
-                    monthlyData[monthKey].returnVisits.push(row);
-                }
-                
-                if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
-                    monthlyData[monthKey].maxPatientNumber = row['患者番号'];
+                    
+                    processedCount++;
+                    
+                    if (!monthlyData[monthKey]) {
+                        monthlyData[monthKey] = {
+                            allRecords: [],
+                            firstVisits: [],
+                            returnVisits: [],
+                            maxPatientNumber: 0
+                        };
+                    }
+                    
+                    monthlyData[monthKey].allRecords.push(row);
+                    
+                    if (row['初診・再診'] === '初診') {
+                        monthlyData[monthKey].firstVisits.push(row);
+                    } else if (row['初診・再診'] === '再診') {
+                        monthlyData[monthKey].returnVisits.push(row);
+                    }
+                    
+                    if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
+                        monthlyData[monthKey].maxPatientNumber = row['患者番号'];
+                    }
+                } catch (error) {
+                    errorCount++;
+                    console.error('データ処理エラー:', error, row);
                 }
             });
+            
+            console.log(`処理完了: ${processedCount}件, エラー: ${errorCount}件`);
             
             // 各月の境界番号を計算（前月の最大番号 + 1）
             const sortedMonths = Object.keys(monthlyData).sort();
