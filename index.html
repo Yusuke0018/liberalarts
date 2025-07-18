@@ -448,6 +448,11 @@
         
         <input type="file" id="fileInput" accept=".csv">
         
+        <div id="dataInfo" style="display: none; background-color: #fff; padding: 15px; border-radius: 5px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <p style="margin: 0; color: #2c3e50;">現在のデータ: <span id="dataCount" style="font-weight: bold;">0</span>件</p>
+            <button onclick="clearData()" style="margin-top: 10px; padding: 5px 15px; background-color: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer;">データをクリア</button>
+        </div>
+        
         <div class="controls" id="controls">
             <div class="date-selector">
                 <label for="startMonth">開始月：</label>
@@ -671,12 +676,35 @@
             
             showLoading(true);
             
+            // グラフインスタンスをクリア
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+            if (regionalChartInstance) {
+                regionalChartInstance.destroy();
+                regionalChartInstance = null;
+            }
+            if (comparisonChartInstance) {
+                comparisonChartInstance.destroy();
+                comparisonChartInstance = null;
+            }
+            if (wardChartInstance) {
+                wardChartInstance.destroy();
+                wardChartInstance = null;
+            }
+            
             Papa.parse(file, {
                 header: true,
                 dynamicTyping: true,
                 skipEmptyLines: true,
                 complete: function(results) {
-                    processData(results.data);
+                    try {
+                        processData(results.data);
+                    } catch (error) {
+                        showError('データの処理中にエラーが発生しました: ' + error.message);
+                        showLoading(false);
+                    }
                 },
                 error: function(error) {
                     showError('ファイルの読み込みに失敗しました: ' + error.message);
@@ -692,19 +720,31 @@
             const newData = data.filter(row => !existingKeys.has(`${row['日付']}_${row['患者番号']}`));
             allData = [...allData, ...newData];
             
+            // データ情報を更新
+            document.getElementById('dataInfo').style.display = 'block';
+            document.getElementById('dataCount').textContent = allData.length;
+            
+            // データ分析を実行
             analyzeData();
-            showLoading(false);
             
-            // UIを表示
-            document.getElementById('controls').style.display = 'block';
-            document.getElementById('summaryCards').style.display = 'grid';
-            document.getElementById('tabs').style.display = 'flex';
-            document.getElementById('monthlyChart').style.display = 'block';
-            document.getElementById('regionalTable').style.display = 'block';
-            document.getElementById('thresholdSettings').style.display = 'block';
-            
-            // 日付範囲を設定
+            // 日付範囲を設定（データ分析後に実行）
             setDateRange();
+            
+            // 処理が完了してからUIを表示（100ms遅延）
+            setTimeout(() => {
+                showLoading(false);
+                
+                // UIを表示
+                document.getElementById('controls').style.display = 'block';
+                document.getElementById('summaryCards').style.display = 'grid';
+                document.getElementById('tabs').style.display = 'flex';
+                document.getElementById('monthlyChart').style.display = 'block';
+                document.getElementById('regionalTable').style.display = 'block';
+                document.getElementById('thresholdSettings').style.display = 'block';
+                
+                // 表示を更新
+                updateDisplay();
+            }, 100);
         }
         
         // データ分析
@@ -870,8 +910,20 @@
         
         // 表示更新
         function updateDisplay() {
-            const startMonth = document.getElementById('startMonth').value;
-            const endMonth = document.getElementById('endMonth').value;
+            let startMonth = document.getElementById('startMonth').value;
+            let endMonth = document.getElementById('endMonth').value;
+            
+            // 期間が設定されていない場合は、自動的に設定
+            if (!startMonth || !endMonth) {
+                setDateRange();
+                startMonth = document.getElementById('startMonth').value;
+                endMonth = document.getElementById('endMonth').value;
+                
+                if (!startMonth || !endMonth) {
+                    showError('期間を設定してください');
+                    return;
+                }
+            }
             
             const filteredMonths = Object.keys(monthlyData)
                 .filter(month => month >= startMonth && month <= endMonth)
@@ -1583,6 +1635,49 @@
         function resetZoom() {
             if (currentChart) {
                 currentChart.resetZoom();
+            }
+        }
+        
+        // データクリア関数
+        function clearData() {
+            if (confirm('すべてのデータをクリアしますか？')) {
+                // データをクリア
+                allData = [];
+                monthlyData = {};
+                
+                // グラフインスタンスをクリア
+                if (currentChart) {
+                    currentChart.destroy();
+                    currentChart = null;
+                }
+                if (regionalChartInstance) {
+                    regionalChartInstance.destroy();
+                    regionalChartInstance = null;
+                }
+                if (comparisonChartInstance) {
+                    comparisonChartInstance.destroy();
+                    comparisonChartInstance = null;
+                }
+                if (wardChartInstance) {
+                    wardChartInstance.destroy();
+                    wardChartInstance = null;
+                }
+                
+                // UIを非表示
+                document.getElementById('controls').style.display = 'none';
+                document.getElementById('summaryCards').style.display = 'none';
+                document.getElementById('tabs').style.display = 'none';
+                document.getElementById('monthlyChart').style.display = 'none';
+                document.getElementById('regionalChart').style.display = 'none';
+                document.getElementById('comparisonChart').style.display = 'none';
+                document.getElementById('wardChart').style.display = 'none';
+                document.getElementById('regionalTable').style.display = 'none';
+                document.getElementById('thresholdSettings').style.display = 'none';
+                document.getElementById('periodComparisonContainer').style.display = 'none';
+                document.getElementById('dataInfo').style.display = 'none';
+                
+                // ファイル入力をリセット
+                document.getElementById('fileInput').value = '';
             }
         }
         
