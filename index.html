@@ -462,6 +462,16 @@
                 <input type="month" id="endMonth">
                 
                 <button onclick="updateAnalysis()" style="padding: 8px 20px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">期間を更新</button>
+                
+                <div style="margin-top: 10px;">
+                    <span style="margin-right: 10px;">クイック選択：</span>
+                    <button onclick="selectLastMonth()" style="padding: 5px 10px; margin-right: 5px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">先月</button>
+                    <button onclick="selectThisYear()" style="padding: 5px 10px; margin-right: 5px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">今年</button>
+                    <button onclick="selectLastYear()" style="padding: 5px 10px; margin-right: 5px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">昨年</button>
+                    <button onclick="selectLast3Months()" style="padding: 5px 10px; margin-right: 5px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">過去3ヶ月</button>
+                    <button onclick="selectLast6Months()" style="padding: 5px 10px; margin-right: 5px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">過去6ヶ月</button>
+                    <button onclick="selectAll()" style="padding: 5px 10px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">全期間</button>
+                </div>
             </div>
             <div class="export-buttons">
                 <button class="export-button export-pdf" onclick="exportToPDF()">PDFで出力</button>
@@ -509,6 +519,24 @@
                 <h3>再初診率</h3>
                 <div class="value" id="reRateValue">-</div>
                 <div class="sub-value" id="reRateChange">-</div>
+            </div>
+            
+            <div class="summary-card return" style="border-left-color: #e74c3c;">
+                <h3>再診</h3>
+                <div class="value" id="returnValue">-</div>
+                <div class="sub-value" id="returnChange">-</div>
+            </div>
+            
+            <div class="summary-card total-all" style="border-left-color: #34495e;">
+                <h3>全患者数</h3>
+                <div class="value" id="totalAllValue">-</div>
+                <div class="sub-value" id="totalAllChange">-</div>
+            </div>
+            
+            <div class="summary-card rate" style="border-left-color: #e74c3c;">
+                <h3>再診率</h3>
+                <div class="value" id="returnRateValue">-</div>
+                <div class="sub-value" id="returnRateChange">-</div>
             </div>
         </div>
         
@@ -762,6 +790,7 @@
                     monthlyData[monthKey] = {
                         allRecords: [],
                         firstVisits: [],
+                        returnVisits: [],
                         maxPatientNumber: 0
                     };
                 }
@@ -770,6 +799,8 @@
                 
                 if (row['初診・再診'] === '初診') {
                     monthlyData[monthKey].firstVisits.push(row);
+                } else if (row['初診・再診'] === '再診') {
+                    monthlyData[monthKey].returnVisits.push(row);
                 }
                 
                 if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
@@ -967,57 +998,82 @@
             
             const lastData = monthlyData[lastMonth];
             const pureCount = lastData.pureFirst.length;
-            const reCount = lastData.reFirst.length;
-            const totalCount = pureCount + reCount;
-            const pureRate = totalCount > 0 ? (pureCount / totalCount * 100).toFixed(1) : 0;
-            const reRate = totalCount > 0 ? (reCount / totalCount * 100).toFixed(1) : 0;
+            const reFirstCount = lastData.reFirst.length;
+            const returnCount = lastData.returnVisits.length;
+            const totalFirstVisits = pureCount + reFirstCount;
+            const totalAllVisits = pureCount + reFirstCount + returnCount;
+            
+            // 全患者に対する割合
+            const pureRateAll = totalAllVisits > 0 ? (pureCount / totalAllVisits * 100).toFixed(1) : 0;
+            const reFirstRateAll = totalAllVisits > 0 ? (reFirstCount / totalAllVisits * 100).toFixed(1) : 0;
+            const returnRateAll = totalAllVisits > 0 ? (returnCount / totalAllVisits * 100).toFixed(1) : 0;
             
             document.getElementById('pureFirstValue').textContent = pureCount.toLocaleString() + '人';
-            document.getElementById('reFirstValue').textContent = reCount.toLocaleString() + '人';
-            document.getElementById('totalFirstValue').textContent = totalCount.toLocaleString() + '人';
-            document.getElementById('pureRateValue').textContent = pureRate + '%';
-            document.getElementById('reRateValue').textContent = reRate + '%';
+            document.getElementById('reFirstValue').textContent = reFirstCount.toLocaleString() + '人';
+            document.getElementById('totalFirstValue').textContent = totalFirstVisits.toLocaleString() + '人';
+            document.getElementById('pureRateValue').textContent = pureRateAll + '%';
+            document.getElementById('reRateValue').textContent = reFirstRateAll + '%';
+            document.getElementById('returnValue').textContent = returnCount.toLocaleString() + '人';
+            document.getElementById('totalAllValue').textContent = totalAllVisits.toLocaleString() + '人';
+            document.getElementById('returnRateValue').textContent = returnRateAll + '%';
             
             // 前月比・前年比を計算
             if (prevMonth && monthlyData[prevMonth]) {
                 const prevData = monthlyData[prevMonth];
                 const prevPure = prevData.pureFirst.length;
-                const prevRe = prevData.reFirst.length;
-                const prevTotal = prevPure + prevRe;
+                const prevReFirst = prevData.reFirst.length;
+                const prevReturn = prevData.returnVisits.length;
+                const prevTotalFirst = prevPure + prevReFirst;
+                const prevTotalAll = prevPure + prevReFirst + prevReturn;
                 
                 const [prevYear, prevMon] = prevMonth.split('-');
                 const prevMonthLabel = `${prevYear}年${parseInt(prevMon)}月比`;
                 
                 document.getElementById('pureFirstChange').innerHTML = getChangeText(pureCount, prevPure, prevMonthLabel);
-                document.getElementById('reFirstChange').innerHTML = getChangeText(reCount, prevRe, prevMonthLabel);
-                document.getElementById('totalFirstChange').innerHTML = getChangeText(totalCount, prevTotal, prevMonthLabel);
+                document.getElementById('reFirstChange').innerHTML = getChangeText(reFirstCount, prevReFirst, prevMonthLabel);
+                document.getElementById('totalFirstChange').innerHTML = getChangeText(totalFirstVisits, prevTotalFirst, prevMonthLabel);
+                document.getElementById('returnChange').innerHTML = getChangeText(returnCount, prevReturn, prevMonthLabel);
+                document.getElementById('totalAllChange').innerHTML = getChangeText(totalAllVisits, prevTotalAll, prevMonthLabel);
             } else {
                 document.getElementById('pureFirstChange').textContent = '前月データなし';
                 document.getElementById('reFirstChange').textContent = '前月データなし';
                 document.getElementById('totalFirstChange').textContent = '前月データなし';
+                document.getElementById('returnChange').textContent = '前月データなし';
+                document.getElementById('totalAllChange').textContent = '前月データなし';
             }
             
             if (monthlyData[lastYearMonth]) {
                 const lastYearData = monthlyData[lastYearMonth];
-                const lastYearTotal = lastYearData.pureFirst.length + lastYearData.reFirst.length;
-                if (lastYearTotal > 0) {
-                    const lastYearPureRate = (lastYearData.pureFirst.length / lastYearTotal * 100).toFixed(1);
-                    const lastYearReRate = (lastYearData.reFirst.length / lastYearTotal * 100).toFixed(1);
-                    const pureRateChange = (parseFloat(pureRate) - parseFloat(lastYearPureRate)).toFixed(1);
-                    const reRateChange = (parseFloat(reRate) - parseFloat(lastYearReRate)).toFixed(1);
+                const lastYearPure = lastYearData.pureFirst.length;
+                const lastYearReFirst = lastYearData.reFirst.length;
+                const lastYearReturn = lastYearData.returnVisits.length;
+                const lastYearTotalAll = lastYearPure + lastYearReFirst + lastYearReturn;
+                
+                if (lastYearTotalAll > 0) {
+                    const lastYearPureRate = (lastYearPure / lastYearTotalAll * 100).toFixed(1);
+                    const lastYearReRate = (lastYearReFirst / lastYearTotalAll * 100).toFixed(1);
+                    const lastYearReturnRate = (lastYearReturn / lastYearTotalAll * 100).toFixed(1);
+                    
+                    const pureRateChange = (parseFloat(pureRateAll) - parseFloat(lastYearPureRate)).toFixed(1);
+                    const reRateChange = (parseFloat(reFirstRateAll) - parseFloat(lastYearReRate)).toFixed(1);
+                    const returnRateChange = (parseFloat(returnRateAll) - parseFloat(lastYearReturnRate)).toFixed(1);
                     
                     const [lyYear, lyMon] = lastYearMonth.split('-');
                     const pureChangeClass = pureRateChange > 0 ? 'increase' : 'decrease';
                     const reChangeClass = reRateChange > 0 ? 'increase' : 'decrease';
+                    const returnChangeClass = returnRateChange > 0 ? 'increase' : 'decrease';
                     
                     document.getElementById('pureRateChange').innerHTML = 
                         `${lyYear}年${parseInt(lyMon)}月比: <span class="${pureChangeClass}">${pureRateChange > 0 ? '+' : ''}${pureRateChange}pt</span>`;
                     document.getElementById('reRateChange').innerHTML = 
                         `${lyYear}年${parseInt(lyMon)}月比: <span class="${reChangeClass}">${reRateChange > 0 ? '+' : ''}${reRateChange}pt</span>`;
+                    document.getElementById('returnRateChange').innerHTML = 
+                        `${lyYear}年${parseInt(lyMon)}月比: <span class="${returnChangeClass}">${returnRateChange > 0 ? '+' : ''}${returnRateChange}pt</span>`;
                 }
             } else {
                 document.getElementById('pureRateChange').textContent = '前年同月データなし';
                 document.getElementById('reRateChange').textContent = '前年同月データなし';
+                document.getElementById('returnRateChange').textContent = '前年同月データなし';
             }
         }
         
@@ -1646,6 +1702,68 @@
         function resetZoom() {
             if (currentChart) {
                 currentChart.resetZoom();
+            }
+        }
+        
+        // クイック選択関数
+        function selectLastMonth() {
+            const months = Object.keys(monthlyData).sort();
+            if (months.length > 0) {
+                const lastMonth = months[months.length - 1];
+                document.getElementById('startMonth').value = lastMonth;
+                document.getElementById('endMonth').value = lastMonth;
+                updateAnalysis();
+            }
+        }
+        
+        function selectThisYear() {
+            const currentYear = new Date().getFullYear();
+            const months = Object.keys(monthlyData).filter(m => m.startsWith(currentYear + '-')).sort();
+            if (months.length > 0) {
+                document.getElementById('startMonth').value = months[0];
+                document.getElementById('endMonth').value = months[months.length - 1];
+                updateAnalysis();
+            }
+        }
+        
+        function selectLastYear() {
+            const lastYear = new Date().getFullYear() - 1;
+            const months = Object.keys(monthlyData).filter(m => m.startsWith(lastYear + '-')).sort();
+            if (months.length > 0) {
+                document.getElementById('startMonth').value = months[0];
+                document.getElementById('endMonth').value = months[months.length - 1];
+                updateAnalysis();
+            }
+        }
+        
+        function selectLast3Months() {
+            const months = Object.keys(monthlyData).sort();
+            if (months.length > 0) {
+                const endMonth = months[months.length - 1];
+                const startIdx = Math.max(0, months.length - 3);
+                document.getElementById('startMonth').value = months[startIdx];
+                document.getElementById('endMonth').value = endMonth;
+                updateAnalysis();
+            }
+        }
+        
+        function selectLast6Months() {
+            const months = Object.keys(monthlyData).sort();
+            if (months.length > 0) {
+                const endMonth = months[months.length - 1];
+                const startIdx = Math.max(0, months.length - 6);
+                document.getElementById('startMonth').value = months[startIdx];
+                document.getElementById('endMonth').value = endMonth;
+                updateAnalysis();
+            }
+        }
+        
+        function selectAll() {
+            const months = Object.keys(monthlyData).sort();
+            if (months.length > 0) {
+                document.getElementById('startMonth').value = months[0];
+                document.getElementById('endMonth').value = months[months.length - 1];
+                updateAnalysis();
             }
         }
         
