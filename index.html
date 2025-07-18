@@ -591,6 +591,54 @@
         let comparisonChartInstance = null;
         let wardChartInstance = null;
         
+        // ローカルストレージからデータを読み込み
+        function loadDataFromLocalStorage() {
+            try {
+                const savedData = localStorage.getItem('liberalArtsPatientData');
+                if (savedData) {
+                    allData = JSON.parse(savedData);
+                    document.getElementById('dataInfo').style.display = 'block';
+                    document.getElementById('dataCount').textContent = allData.length;
+                    
+                    // データ分析を実行
+                    analyzeData();
+                    setDateRange();
+                    
+                    // UIを表示
+                    document.getElementById('controls').style.display = 'block';
+                    document.getElementById('summaryCards').style.display = 'grid';
+                    document.getElementById('tabs').style.display = 'flex';
+                    document.getElementById('monthlyChart').style.display = 'block';
+                    document.getElementById('regionalTable').style.display = 'block';
+                    
+                    // 表示を更新
+                    updateDisplay();
+                    
+                    console.log(`ローカルストレージから${allData.length}件のデータを読み込みました`);
+                }
+            } catch (error) {
+                console.error('ローカルストレージからのデータ読み込みエラー:', error);
+            }
+        }
+        
+        // ローカルストレージにデータを保存
+        function saveDataToLocalStorage() {
+            try {
+                localStorage.setItem('liberalArtsPatientData', JSON.stringify(allData));
+                console.log(`ローカルストレージに${allData.length}件のデータを保存しました`);
+            } catch (error) {
+                console.error('ローカルストレージへの保存エラー:', error);
+                if (error.name === 'QuotaExceededError') {
+                    showError('ローカルストレージの容量が不足しています。古いデータをクリアしてください。');
+                }
+            }
+        }
+        
+        // ページ読み込み時にローカルストレージからデータを復元
+        window.addEventListener('load', () => {
+            loadDataFromLocalStorage();
+        });
+        
         // 大阪市の区リスト
         const osakaWards = [
             '北区', '都島区', '福島区', '此花区', '中央区', '西区', '港区', '大正区',
@@ -710,6 +758,9 @@
             
             // 日付範囲を設定（データ分析後に実行）
             setDateRange();
+            
+            // ローカルストレージに保存
+            saveDataToLocalStorage();
             
             // 処理が完了してからUIを表示（100ms遅延）
             setTimeout(() => {
@@ -2121,6 +2172,9 @@
                 // データをクリア
                 allData = [];
                 monthlyData = {};
+                
+                // ローカルストレージもクリア
+                localStorage.removeItem('liberalArtsPatientData');
                 
                 // グラフインスタンスをクリア
                 if (currentChart) {
