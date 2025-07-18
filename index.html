@@ -842,12 +842,12 @@
                     
                     if (row['初診・再診'] === '初診') {
                         monthlyData[monthKey].firstVisits.push(row);
+                        // 初診の最大患者番号のみを追跡（境界計算用）
+                        if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
+                            monthlyData[monthKey].maxPatientNumber = row['患者番号'];
+                        }
                     } else if (row['初診・再診'] === '再診') {
                         monthlyData[monthKey].returnVisits.push(row);
-                    }
-                    
-                    if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
-                        monthlyData[monthKey].maxPatientNumber = row['患者番号'];
                     }
                 } catch (error) {
                     errorCount++;
@@ -880,8 +880,8 @@
                 if (month === '2024-07' || month === '2024-08') {
                     console.log(`\n=== ${month} ===`);
                     console.log(`境界: ${monthlyData[month].boundary}`);
-                    console.log(`前月最大: ${previousMax}`);
-                    console.log(`当月最大: ${monthlyData[month].maxPatientNumber}`);
+                    console.log(`前月の初診最大: ${previousMax}`);
+                    console.log(`当月の初診最大: ${monthlyData[month].maxPatientNumber}`);
                     console.log(`初診総数: ${monthlyData[month].firstVisits.length}`);
                     
                     if (month === '2024-08') {

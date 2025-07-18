@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>最大患者番号確認</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>各月の最大患者番号確認</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <pre id="output" style="background: #f4f4f4; padding: 20px;"></pre>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                Papa.parse(text, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        checkMaxNumbers(results.data);
+                    }
+                });
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+        
+        function checkMaxNumbers(data) {
+            const output = document.getElementById('output');
+            let html = '=== 月別最大患者番号（全データ）===\n\n';
+            
+            // 月別に全レコードの最大患者番号を確認
+            const monthlyMax = {};
+            
+            data.forEach(row => {
+                if (!row['日付'] || !row['患者番号']) return;
+                
+                const date = new Date(row['日付']);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (!monthlyMax[monthKey]) {
+                    monthlyMax[monthKey] = {
+                        max: 0,
+                        maxFirstVisit: 0,
+                        firstVisitNumbers: [],
+                        allNumbers: []
+                    };
+                }
+                
+                // 全レコードの患者番号を追跡
+                monthlyMax[monthKey].allNumbers.push(row['患者番号']);
+                
+                if (row['患者番号'] > monthlyMax[monthKey].max) {
+                    monthlyMax[monthKey].max = row['患者番号'];
+                }
+                
+                // 初診のみの最大値も追跡
+                if (row['初診・再診'] === '初診') {
+                    monthlyMax[monthKey].firstVisitNumbers.push(row['患者番号']);
+                    if (row['患者番号'] > monthlyMax[monthKey].maxFirstVisit) {
+                        monthlyMax[monthKey].maxFirstVisit = row['患者番号'];
+                    }
+                }
+            });
+            
+            // 2024年の各月を表示
+            const months = Object.keys(monthlyMax).filter(m => m.startsWith('2024')).sort();
+            
+            months.forEach(month => {
+                const data = monthlyMax[month];
+                const allSorted = data.allNumbers.sort((a, b) => a - b);
+                const firstSorted = data.firstVisitNumbers.sort((a, b) => a - b);
+                
+                html += `${month}:\n`;
+                html += `  全レコード最大: ${data.max}\n`;
+                html += `  初診のみ最大: ${data.maxFirstVisit}\n`;
+                html += `  全レコード数: ${allSorted.length}\n`;
+                html += `  初診レコード数: ${firstSorted.length}\n`;
+                
+                // 最大値付近の番号を表示
+                html += `  全レコード最後の5件: ${allSorted.slice(-5).join(', ')}\n`;
+                html += `  初診最後の5件: ${firstSorted.slice(-5).join(', ')}\n`;
+                
+                // 7月と8月は詳細表示
+                if (month === '2024-07' || month === '2024-08') {
+                    html += `  初診の最初の10件: ${firstSorted.slice(0, 10).join(', ')}\n`;
+                }
+                
+                html += '\n';
+            });
+            
+            output.textContent = html;
+        }
+    </script>
+</body>
+</html>
