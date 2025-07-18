@@ -472,6 +472,11 @@
                     <button onclick="selectLast6Months()" style="padding: 5px 10px; margin-right: 5px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">過去6ヶ月</button>
                     <button onclick="selectAll()" style="padding: 5px 10px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">全期間</button>
                 </div>
+                
+                <div style="margin-top: 10px;" id="monthButtons">
+                    <span style="margin-right: 10px;">月別選択：</span>
+                    <!-- 月別ボタンは動的に生成される -->
+                </div>
             </div>
             <div class="export-buttons">
                 <button class="export-button export-pdf" onclick="exportToPDF()">PDFで出力</button>
@@ -1005,7 +1010,35 @@
             if (months.length > 0) {
                 document.getElementById('startMonth').value = months[0];
                 document.getElementById('endMonth').value = months[months.length - 1];
+                
+                // 月別ボタンを生成
+                generateMonthButtons(months);
             }
+        }
+        
+        // 月別ボタンを生成
+        function generateMonthButtons(months) {
+            const container = document.getElementById('monthButtons');
+            container.innerHTML = '<span style="margin-right: 10px;">月別選択：</span>';
+            
+            // 最新の12ヶ月分のボタンを表示
+            const recentMonths = months.slice(-12);
+            
+            recentMonths.forEach(month => {
+                const [year, mon] = month.split('-');
+                const button = document.createElement('button');
+                button.textContent = `${year}/${mon}`;
+                button.style.cssText = 'padding: 3px 8px; margin: 2px; background-color: #ecf0f1; color: #333; border: 1px solid #bdc3c7; border-radius: 3px; cursor: pointer;';
+                button.onclick = () => selectSingleMonth(month);
+                container.appendChild(button);
+            });
+        }
+        
+        // 特定の月を選択
+        function selectSingleMonth(month) {
+            document.getElementById('startMonth').value = month;
+            document.getElementById('endMonth').value = month;
+            updateAnalysis();
         }
         
         // 表示更新
@@ -1146,19 +1179,32 @@
             
             const pureData = months.map(month => monthlyData[month].pureFirst.length);
             const reData = months.map(month => monthlyData[month].reFirst.length);
-            const rateData = months.map(month => {
+            const returnData = months.map(month => monthlyData[month].returnVisits.length);
+            
+            // 全患者に対する純初診率
+            const pureRateData = months.map(month => {
                 const pure = monthlyData[month].pureFirst.length;
-                const re = monthlyData[month].reFirst.length;
-                const total = pure + re;
+                const reFirst = monthlyData[month].reFirst.length;
+                const returns = monthlyData[month].returnVisits.length;
+                const total = pure + reFirst + returns;
                 return total > 0 ? (pure / total * 100).toFixed(1) : 0;
+            });
+            
+            // 全患者に対する再初診率
+            const reFirstRateData = months.map(month => {
+                const pure = monthlyData[month].pureFirst.length;
+                const reFirst = monthlyData[month].reFirst.length;
+                const returns = monthlyData[month].returnVisits.length;
+                const total = pure + reFirst + returns;
+                return total > 0 ? (reFirst / total * 100).toFixed(1) : 0;
             });
             
             // 閾値を取得
             const lowThreshold = parseFloat(document.getElementById('lowThreshold').value);
             const mediumThreshold = parseFloat(document.getElementById('mediumThreshold').value);
             
-            // 警告色の設定
-            const lineColors = rateData.map(rate => {
+            // 警告色の設定（純初診率用）
+            const lineColors = pureRateData.map(rate => {
                 const rateValue = parseFloat(rate);
                 if (rateValue <= lowThreshold) return '#e74c3c';
                 if (rateValue <= mediumThreshold) return '#f39c12';
@@ -1188,7 +1234,7 @@
                         },
                         {
                             label: '純初診率',
-                            data: rateData,
+                            data: pureRateData,
                             type: 'line',
                             borderColor: lineColors,
                             backgroundColor: 'transparent',
@@ -1201,6 +1247,16 @@
                                     return lineColors[index];
                                 }
                             }
+                        },
+                        {
+                            label: '再初診率',
+                            data: reFirstRateData,
+                            type: 'line',
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'transparent',
+                            yAxisID: 'y1',
+                            borderWidth: 3,
+                            tension: 0.1
                         }
                     ]
                 },

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV列名デバッグ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>CSV列名デバッグ</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <pre id="output" style="background: #f4f4f4; padding: 20px; margin: 20px 0;"></pre>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const output = document.getElementById('output');
+            output.textContent = 'ファイル読み込み中...\n';
+            
+            // UTF-8で読み込み
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                output.textContent += '\nUTF-8で読み込み完了\n';
+                
+                Papa.parse(text, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        output.textContent += `\nデータ行数: ${results.data.length}\n`;
+                        
+                        if (results.data.length > 0) {
+                            const columns = Object.keys(results.data[0]);
+                            output.textContent += `\n列数: ${columns.length}\n`;
+                            output.textContent += '\n=== 列名一覧 ===\n';
+                            
+                            columns.forEach((col, idx) => {
+                                output.textContent += `${idx + 1}. "${col}"\n`;
+                            });
+                            
+                            output.textContent += '\n=== 最初のデータ行 ===\n';
+                            const firstRow = results.data[0];
+                            for (const [key, value] of Object.entries(firstRow)) {
+                                output.textContent += `"${key}": "${value}"\n`;
+                            }
+                            
+                            // 期待される列名との比較
+                            output.textContent += '\n=== 列名チェック ===\n';
+                            const expectedCols = ['日付', '初診・再診', '患者番号'];
+                            expectedCols.forEach(expected => {
+                                const found = columns.some(col => col === expected);
+                                output.textContent += `"${expected}": ${found ? '✓ 存在' : '✗ 存在しない'}\n`;
+                                
+                                // 似た列名を探す
+                                if (!found) {
+                                    const similar = columns.filter(col => col.includes(expected.substring(0, 2)));
+                                    if (similar.length > 0) {
+                                        output.textContent += `  → 似た列名: ${similar.join(', ')}\n`;
+                                    }
+                                }
+                            });
+                        }
+                    },
+                    error: function(error) {
+                        output.textContent += '\nエラー: ' + error.message;
+                    }
+                });
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+    </script>
+</body>
+</html>
