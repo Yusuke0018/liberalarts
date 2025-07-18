@@ -352,40 +352,6 @@
             display: none;
         }
         
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-            justify-content: flex-end;
-        }
-        
-        .export-button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-        
-        .export-pdf {
-            background-color: #e74c3c;
-            color: white;
-        }
-        
-        .export-pdf:hover {
-            background-color: #c0392b;
-        }
-        
-        .export-excel {
-            background-color: #27ae60;
-            color: white;
-        }
-        
-        .export-excel:hover {
-            background-color: #229954;
-        }
         
         .threshold-settings {
             background-color: #fff;
@@ -477,11 +443,6 @@
                     <span style="margin-right: 10px;">月別選択：</span>
                     <!-- 月別ボタンは動的に生成される -->
                 </div>
-            </div>
-            <div class="export-buttons">
-                <button class="export-button export-pdf" onclick="exportToPDF()">PDFで出力</button>
-                <button class="export-button export-excel" onclick="exportToExcel()">Excelで出力</button>
-                <button class="export-button" onclick="generateSummaryReport()" style="background-color: #8e44ad; color: white;">サマリーレポート生成</button>
             </div>
         </div>
         
@@ -589,10 +550,20 @@
         </div>
         
         <div class="chart-container" id="regionalChart" style="display: none;">
-            <h2>地域別 患者分布</h2>
-            <div style="text-align: right; margin-bottom: 10px;">
-                <button id="regionalBarBtn" onclick="switchRegionalChart('bar')" style="padding: 5px 15px; margin-right: 5px; background-color: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">棒グラフ</button>
-                <button id="regionalPieBtn" onclick="switchRegionalChart('pie')" style="padding: 5px 15px; background-color: #ecf0f1; color: #333; border: none; border-radius: 3px; cursor: pointer;">円グラフ</button>
+            <h2>地域別 純初診・再初診数の月別推移</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="regionSelect">地域選択：</label>
+                    <select id="regionSelect" onchange="updateRegionalTrendChart()" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 3px;">
+                        <option value="all">全地域</option>
+                    </select>
+                    <select id="regionalChartType" onchange="updateRegionalTrendChart()" style="padding: 5px 10px; border: 1px solid #ddd; border-radius: 3px;">
+                        <option value="combined">純初診・再初診両方</option>
+                        <option value="pure">純初診のみ</option>
+                        <option value="re">再初診のみ</option>
+                    </select>
+                </div>
+                <button onclick="resetRegionalZoom()" style="padding: 5px 15px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">ズームリセット</button>
             </div>
             <div class="chart-wrapper">
                 <canvas id="regionalCanvas"></canvas>
@@ -1729,11 +1700,15 @@
         let currentRegionalChartType = 'bar';
         
         // 地域別グラフ更新
-        function updateRegionalChart(chartType = null) {
-            if (chartType) {
-                currentRegionalChartType = chartType;
-            }
-            
+        function updateRegionalChart() {
+            // 地域選択ドロップダウンを更新
+            updateRegionSelect();
+            // グラフを更新
+            updateRegionalTrendChart();
+        }
+        
+        // 地域選択ドロップダウンを更新
+        function updateRegionSelect() {
             const startMonth = document.getElementById('startMonth').value;
             const endMonth = document.getElementById('endMonth').value;
             
@@ -1743,31 +1718,57 @@
             
             if (filteredMonths.length === 0) return;
             
-            // 期間全体の地域別集計
-            const totalRegional = {};
-            
+            // 全期間の地域を集計
+            const allRegions = new Set();
             filteredMonths.forEach(month => {
                 const monthRegional = monthlyData[month].regional;
-                
-                Object.keys(monthRegional.pure).forEach(region => {
-                    if (!totalRegional[region]) {
-                        totalRegional[region] = { pure: 0, re: 0 };
-                    }
-                    totalRegional[region].pure += monthRegional.pure[region];
-                    totalRegional[region].re += monthRegional.re[region];
-                });
+                Object.keys(monthRegional.pure).forEach(region => allRegions.add(region));
+                Object.keys(monthRegional.re).forEach(region => allRegions.add(region));
             });
             
-            // 上位地域を抽出
-            const topRegions = Object.entries(totalRegional)
-                .map(([region, data]) => ({
-                    region,
-                    total: data.pure + data.re,
-                    pure: data.pure,
-                    re: data.re
-                }))
-                .sort((a, b) => b.total - a.total)
-                .slice(0, 15);
+            // 地域を配列に変換してソート
+            const sortedRegions = Array.from(allRegions).sort((a, b) => {
+                // 西区を最初に
+                if (a === '西区') return -1;
+                if (b === '西区') return 1;
+                // 区を優先
+                const aIsWard = a.includes('区');
+                const bIsWard = b.includes('区');
+                if (aIsWard && !bIsWard) return -1;
+                if (!aIsWard && bIsWard) return 1;
+                return a.localeCompare(b);
+            });
+            
+            const regionSelect = document.getElementById('regionSelect');
+            const currentValue = regionSelect.value;
+            
+            // オプションを更新
+            regionSelect.innerHTML = '<option value="all">全地域</option>';
+            sortedRegions.forEach(region => {
+                const option = document.createElement('option');
+                option.value = region;
+                option.textContent = region;
+                regionSelect.appendChild(option);
+            });
+            
+            // 以前の選択を復元
+            if (currentValue && Array.from(regionSelect.options).some(opt => opt.value === currentValue)) {
+                regionSelect.value = currentValue;
+            }
+        }
+        
+        // 地域別月別推移グラフを更新
+        function updateRegionalTrendChart() {
+            const selectedRegion = document.getElementById('regionSelect').value;
+            const chartType = document.getElementById('regionalChartType').value;
+            const startMonth = document.getElementById('startMonth').value;
+            const endMonth = document.getElementById('endMonth').value;
+            
+            const filteredMonths = Object.keys(monthlyData)
+                .filter(month => month >= startMonth && month <= endMonth)
+                .sort();
+            
+            if (filteredMonths.length === 0) return;
             
             const ctx = document.getElementById('regionalCanvas').getContext('2d');
             
@@ -1775,103 +1776,146 @@
                 regionalChartInstance.destroy();
             }
             
-            if (currentRegionalChartType === 'pie') {
-                // 円グラフの場合
-                const pieData = topRegions.map(r => r.total);
-                const pieLabels = topRegions.map(r => `${r.region} (${r.total}人)`);
-                const colors = [
-                    '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
-                    '#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#d35400',
-                    '#c0392b', '#27ae60', '#2980b9', '#8e44ad', '#16a085'
-                ];
+            const labels = filteredMonths.map(month => {
+                const [year, mon] = month.split('-');
+                return `${year}年${parseInt(mon)}月`;
+            });
+            
+            let datasets = [];
+            
+            if (selectedRegion === 'all') {
+                // 全地域の場合、上位5地域を表示
+                const regionalTotals = {};
                 
-                regionalChartInstance = new Chart(ctx, {
-                    type: 'pie',
-                    data: {
-                        labels: pieLabels,
-                        datasets: [{
-                            data: pieData,
-                            backgroundColor: colors.slice(0, topRegions.length)
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'right'
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const region = topRegions[context.dataIndex];
-                                        const percentage = ((region.total / topRegions.reduce((sum, r) => sum + r.total, 0)) * 100).toFixed(1);
-                                        return [
-                                            `${region.region}: ${region.total}人 (${percentage}%)`,
-                                            `純初診: ${region.pure}人`,
-                                            `再初診: ${region.re}人`
-                                        ];
-                                    }
-                                }
-                            }
-                        }
-                    }
+                filteredMonths.forEach(month => {
+                    const monthRegional = monthlyData[month].regional;
+                    Object.keys(monthRegional.pure).forEach(region => {
+                        if (!regionalTotals[region]) regionalTotals[region] = 0;
+                        regionalTotals[region] += monthRegional.pure[region] + (monthRegional.re[region] || 0);
+                    });
                 });
+                
+                // 上位5地域を取得
+                const top5Regions = Object.entries(regionalTotals)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([region]) => region);
+                
+                const colors = ['#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6'];
+                
+                if (chartType === 'combined' || chartType === 'pure') {
+                    // 純初診データ
+                    top5Regions.forEach((region, index) => {
+                        const data = filteredMonths.map(month => {
+                            return monthlyData[month].regional.pure[region] || 0;
+                        });
+                        
+                        datasets.push({
+                            label: `${region} (純初診)`,
+                            data: data,
+                            borderColor: colors[index],
+                            backgroundColor: colors[index] + '20',
+                            borderWidth: 2,
+                            tension: 0.1
+                        });
+                    });
+                }
+                
+                if (chartType === 'combined' || chartType === 're') {
+                    // 再初診データ
+                    top5Regions.forEach((region, index) => {
+                        const data = filteredMonths.map(month => {
+                            return monthlyData[month].regional.re[region] || 0;
+                        });
+                        
+                        datasets.push({
+                            label: `${region} (再初診)`,
+                            data: data,
+                            borderColor: colors[index],
+                            backgroundColor: colors[index] + '40',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.1
+                        });
+                    });
+                }
             } else {
-                // 棒グラフの場合
-                regionalChartInstance = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: topRegions.map(r => r.region),
-                        datasets: [
-                            {
-                                label: '純初診',
-                                data: topRegions.map(r => r.pure),
-                                backgroundColor: '#3498db'
-                        },
-                        {
-                            label: '再初診',
-                            data: topRegions.map(r => r.re),
-                            backgroundColor: '#2ecc71'
-                        }
-                    ]
+                // 特定地域の場合
+                if (chartType === 'combined' || chartType === 'pure') {
+                    const pureData = filteredMonths.map(month => {
+                        return monthlyData[month].regional.pure[selectedRegion] || 0;
+                    });
+                    
+                    datasets.push({
+                        label: `${selectedRegion} (純初診)`,
+                        data: pureData,
+                        backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                        borderColor: 'rgba(52, 152, 219, 1)',
+                        borderWidth: 2,
+                        type: 'bar'
+                    });
+                }
+                
+                if (chartType === 'combined' || chartType === 're') {
+                    const reData = filteredMonths.map(month => {
+                        return monthlyData[month].regional.re[selectedRegion] || 0;
+                    });
+                    
+                    datasets.push({
+                        label: `${selectedRegion} (再初診)`,
+                        data: reData,
+                        backgroundColor: 'rgba(46, 204, 113, 0.6)',
+                        borderColor: 'rgba(46, 204, 113, 1)',
+                        borderWidth: 2,
+                        type: 'bar'
+                    });
+                }
+            }
+            
+            regionalChartInstance = new Chart(ctx, {
+                type: selectedRegion === 'all' ? 'line' : 'bar',
+                data: {
+                    labels: labels,
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        x: {
-                            stacked: true
-                        },
                         y: {
-                            stacked: true,
+                            beginAtZero: true,
                             title: {
                                 display: true,
                                 text: '患者数（人）'
                             }
                         }
+                    },
+                    plugins: {
+                        zoom: {
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                            },
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                            }
+                        }
                     }
                 }
             });
-            }
         }
         
-        // 地域別グラフタイプ切り替え
-        function switchRegionalChart(type) {
-            // ボタンのスタイル更新
-            if (type === 'bar') {
-                document.getElementById('regionalBarBtn').style.backgroundColor = '#3498db';
-                document.getElementById('regionalBarBtn').style.color = 'white';
-                document.getElementById('regionalPieBtn').style.backgroundColor = '#ecf0f1';
-                document.getElementById('regionalPieBtn').style.color = '#333';
-            } else {
-                document.getElementById('regionalPieBtn').style.backgroundColor = '#3498db';
-                document.getElementById('regionalPieBtn').style.color = 'white';
-                document.getElementById('regionalBarBtn').style.backgroundColor = '#ecf0f1';
-                document.getElementById('regionalBarBtn').style.color = '#333';
+        // 地域別グラフのズームリセット
+        function resetRegionalZoom() {
+            if (regionalChartInstance) {
+                regionalChartInstance.resetZoom();
             }
-            
-            updateRegionalChart(type);
         }
         
         // 前年・前月比較グラフ
@@ -2430,8 +2474,8 @@
             return html;
         }
         
-        // PDF出力機能
-        function exportToPDF() {
+        // 削除されたエクスポート機能
+        /*function exportToPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'pt', 'a4');
             
@@ -2800,7 +2844,7 @@
             // PDFを保存
             const fileName = `サマリーレポート_${startMonth}_${endMonth}.pdf`;
             doc.save(fileName);
-        }
+        }*/
     </script>
 </body>
 </html>
