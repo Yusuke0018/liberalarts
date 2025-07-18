@@ -724,6 +724,7 @@
             
             Papa.parse(file, {
                 header: true,
+                encoding: 'Shift-JIS',
                 dynamicTyping: true,
                 skipEmptyLines: true,
                 complete: function(results) {
@@ -783,8 +784,27 @@
             allData.forEach(row => {
                 if (!row['日付'] || !row['初診・再診']) return;
                 
-                const date = new Date(row['日付']);
-                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                // Parse date string (handle both YYYY/MM/DD and YYYY-MM-DD formats)
+                const dateStr = row['日付'];
+                let monthKey;
+                
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length >= 2) {
+                        monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                    }
+                } else if (dateStr.includes('-')) {
+                    const parts = dateStr.split('-');
+                    if (parts.length >= 2) {
+                        monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                    }
+                } else {
+                    // Fallback to Date constructor
+                    const date = new Date(dateStr);
+                    monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                }
+                
+                if (!monthKey || monthKey.includes('NaN')) return;
                 
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {
@@ -823,8 +843,34 @@
                 previousMax = minPatientNumber > 1 ? minPatientNumber - 1 : 0;
             }
             
-            sortedMonths.forEach(month => {
-                monthlyData[month].boundary = previousMax + 1;
+            sortedMonths.forEach((month, idx) => {
+                // 現在の月の最小患者番号を取得
+                let currentMinPatientNumber = Number.MAX_SAFE_INTEGER;
+                monthlyData[month].allRecords.forEach(record => {
+                    if (record['患者番号'] && record['患者番号'] < currentMinPatientNumber) {
+                        currentMinPatientNumber = record['患者番号'];
+                    }
+                });
+                
+                // 患者番号がリセットされた場合の検出
+                // 前月の最大値が100万を超えていて、現在月の最小値が10万未満の場合も考慮
+                if (idx > 0 && (currentMinPatientNumber < previousMax * 0.9 || (previousMax > 1000000 && currentMinPatientNumber < 100000))) {
+                    // 患者番号がリセットされた場合は、現在月の初診の最小患者番号を基準にする
+                    let firstVisitMin = Number.MAX_SAFE_INTEGER;
+                    monthlyData[month].firstVisits.forEach(record => {
+                        if (record['患者番号'] && record['患者番号'] < firstVisitMin) {
+                            firstVisitMin = record['患者番号'];
+                        }
+                    });
+                    
+                    // 初診の最小患者番号より少し小さい値を境界とする
+                    monthlyData[month].boundary = firstVisitMin > 100 ? firstVisitMin - 100 : 0;
+                    console.log(`${month}: 患者番号リセット検出 - 境界: ${monthlyData[month].boundary}, 初診最小: ${firstVisitMin}, 前月最大: ${previousMax}`);
+                } else {
+                    // 通常の境界計算
+                    monthlyData[month].boundary = previousMax + 1;
+                }
+                
                 previousMax = monthlyData[month].maxPatientNumber;
                 
                 // 純初診と再初診を分類

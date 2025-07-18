@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Test August 2024 Boundary Calculation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .pure { background-color: #e8f4e8; }
+        .re { background-color: #f4e8e8; }
+        .error { color: red; font-weight: bold; }
+        .success { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>August 2024 Boundary Calculation Test</h1>
+    <input type="file" id="csvFile" accept=".csv">
+    <div id="results"></div>
+    
+    <script>
+        document.getElementById('csvFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Read file with explicit Shift-JIS encoding
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Parse CSV with Papa Parse
+                Papa.parse(e.target.result, {
+                    header: true,
+                    encoding: 'Shift-JIS',
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        analyzeData(results.data);
+                    },
+                    error: function(error) {
+                        document.getElementById('results').innerHTML = 
+                            `<p class="error">Error parsing CSV: ${error.message}</p>`;
+                    }
+                });
+            };
+            reader.readAsText(file, 'Shift-JIS');
+        });
+        
+        function analyzeData(data) {
+            let output = '<h2>Analysis Results</h2>';
+            
+            // Step 1: Verify column names
+            output += '<h3>Step 1: Column Verification</h3>';
+            const columns = data.length > 0 ? Object.keys(data[0]) : [];
+            output += '<p>Found columns: ' + columns.join(', ') + '</p>';
+            
+            // Step 2: Count August 2024 data
+            output += '<h3>Step 2: August 2024 Data Count</h3>';
+            const august2024Data = data.filter(row => {
+                const dateStr = row['日付'] || row['診察日'] || '';
+                return dateStr.startsWith('2024/08/') || dateStr.startsWith('2024-08-');
+            });
+            
+            const august2024FirstVisits = august2024Data.filter(row => 
+                row['初診・再診'] === '初診' || row['初診再診'] === '初診'
+            );
+            
+            output += `<p>Total August 2024 records: ${august2024Data.length}</p>`;
+            output += `<p>August 2024 first visits: ${august2024FirstVisits.length}</p>`;
+            
+            // Step 3: Find July 2024 maximum patient number
+            output += '<h3>Step 3: July 2024 Maximum Patient Number</h3>';
+            const july2024Data = data.filter(row => {
+                const dateStr = row['日付'] || row['診察日'] || '';
+                return dateStr.startsWith('2024/07/') || dateStr.startsWith('2024-07-');
+            });
+            
+            let julyMaxPatientNumber = 0;
+            july2024Data.forEach(row => {
+                const patientNum = parseInt(row['患者番号']);
+                if (!isNaN(patientNum) && patientNum > julyMaxPatientNumber) {
+                    julyMaxPatientNumber = patientNum;
+                }
+            });
+            
+            output += `<p>July 2024 max patient number: ${julyMaxPatientNumber}</p>`;
+            output += `<p>Expected August 2024 boundary: ${julyMaxPatientNumber + 1}</p>`;
+            
+            // Step 4: Analyze August patient numbers
+            output += '<h3>Step 4: August 2024 Patient Number Analysis</h3>';
+            const augustBoundary = julyMaxPatientNumber + 1;
+            let pureFirsstCount = 0;
+            let reFirstCount = 0;
+            const patientNumberDistribution = {};
+            
+            august2024FirstVisits.forEach(row => {
+                const patientNum = parseInt(row['患者番号']);
+                if (!isNaN(patientNum)) {
+                    if (patientNum >= augustBoundary) {
+                        pureFirsstCount++;
+                    } else {
+                        reFirstCount++;
+                    }
+                    
+                    // Track distribution
+                    const range = Math.floor(patientNum / 1000000) + 'M';
+                    patientNumberDistribution[range] = (patientNumberDistribution[range] || 0) + 1;
+                }
+            });
+            
+            output += `<p>Pure first visits (patient number >= ${augustBoundary}): ${pureFirsstCount}</p>`;
+            output += `<p>Re-first visits (patient number < ${augustBoundary}): ${reFirstCount}</p>`;
+            output += `<p>Pure first visit rate: ${(pureFirsstCount / (pureFirsstCount + reFirstCount) * 100).toFixed(1)}%</p>`;
+            
+            // Step 5: Show patient number distribution
+            output += '<h4>Patient Number Distribution:</h4>';
+            output += '<table>';
+            output += '<tr><th>Range</th><th>Count</th></tr>';
+            Object.entries(patientNumberDistribution).sort().forEach(([range, count]) => {
+                output += `<tr><td>${range}</td><td>${count}</td></tr>`;
+            });
+            output += '</table>';
+            
+            // Step 6: Sample classifications
+            output += '<h3>Step 5: Sample Patient Classifications (First 30)</h3>';
+            output += '<table>';
+            output += '<tr><th>Date</th><th>Patient Number</th><th>Name</th><th>Classification</th></tr>';
+            
+            august2024FirstVisits.slice(0, 30).forEach(row => {
+                const patientNum = parseInt(row['患者番号']);
+                const classification = patientNum >= augustBoundary ? 'PURE' : 'RE';
+                const cssClass = patientNum >= augustBoundary ? 'pure' : 're';
+                output += `<tr class="${cssClass}">`;
+                output += `<td>${row['日付'] || row['診察日']}</td>`;
+                output += `<td>${patientNum}</td>`;
+                output += `<td>${row['患者氏名'] || ''}</td>`;
+                output += `<td>${classification}</td>`;
+                output += '</tr>';
+            });
+            output += '</table>';
+            
+            // Step 7: Check for anomalies
+            output += '<h3>Step 6: Anomaly Check</h3>';
+            const augustMinPatientNumber = Math.min(...august2024FirstVisits
+                .map(row => parseInt(row['患者番号']))
+                .filter(num => !isNaN(num))
+            );
+            const augustMaxPatientNumber = Math.max(...august2024FirstVisits
+                .map(row => parseInt(row['患者番号']))
+                .filter(num => !isNaN(num))
+            );
+            
+            output += `<p>August min patient number: ${augustMinPatientNumber}</p>`;
+            output += `<p>August max patient number: ${augustMaxPatientNumber}</p>`;
+            
+            if (augustMinPatientNumber < julyMaxPatientNumber) {
+                output += `<p class="success">✓ Some August patients have numbers lower than July max (expected for re-first visits)</p>`;
+            } else {
+                output += `<p class="error">✗ All August patients have numbers higher than July max (unexpected - no re-first visits?)</p>`;
+            }
+            
+            document.getElementById('results').innerHTML = output;
+        }
+    </script>
+</body>
+</html>

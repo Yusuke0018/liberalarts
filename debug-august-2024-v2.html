@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Debug August 2024 Data V2</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>August 2024 Data Debug V2</h1>
+    <input type="file" id="csvFile" accept=".csv">
+    <div id="results"></div>
+    
+    <script>
+        document.getElementById('csvFile').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            Papa.parse(file, {
+                header: true,
+                encoding: 'Shift-JIS',
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const data = results.data;
+                    let output = '<h2>Debug Results V2</h2>';
+                    
+                    // First, let's check the column names
+                    output += '<h3>Column Names Found:</h3>';
+                    output += '<ul>';
+                    if (data.length > 0) {
+                        Object.keys(data[0]).forEach(key => {
+                            output += `<li>"${key}"</li>`;
+                        });
+                    }
+                    output += '</ul>';
+                    
+                    // Check first few rows
+                    output += '<h3>First 5 Rows:</h3>';
+                    output += '<table border="1"><tr>';
+                    if (data.length > 0) {
+                        Object.keys(data[0]).forEach(key => {
+                            output += `<th>${key}</th>`;
+                        });
+                        output += '</tr>';
+                        
+                        data.slice(0, 5).forEach(row => {
+                            output += '<tr>';
+                            Object.values(row).forEach(val => {
+                                output += `<td>${val}</td>`;
+                            });
+                            output += '</tr>';
+                        });
+                    }
+                    output += '</table>';
+                    
+                    // Now process the data with the actual column names found
+                    const monthlyData = {};
+                    const dateColumn = Object.keys(data[0]).find(key => 
+                        key.includes('日付') || key.includes('診察日') || key === '日付'
+                    );
+                    const visitTypeColumn = Object.keys(data[0]).find(key => 
+                        key.includes('初診') && key.includes('再診')
+                    );
+                    const patientNumberColumn = Object.keys(data[0]).find(key => 
+                        key.includes('患者番号') || key === '患者番号'
+                    );
+                    
+                    output += `<h3>Detected Columns:</h3>`;
+                    output += `<p>Date Column: "${dateColumn}"</p>`;
+                    output += `<p>Visit Type Column: "${visitTypeColumn}"</p>`;
+                    output += `<p>Patient Number Column: "${patientNumberColumn}"</p>`;
+                    
+                    if (!dateColumn || !visitTypeColumn || !patientNumberColumn) {
+                        output += '<p style="color: red;">Error: Could not find required columns!</p>';
+                        document.getElementById('results').innerHTML = output;
+                        return;
+                    }
+                    
+                    // Process data
+                    data.forEach(row => {
+                        if (!row[dateColumn] || !row[patientNumberColumn]) return;
+                        
+                        const dateStr = row[dateColumn];
+                        const patientNumber = parseInt(row[patientNumberColumn]);
+                        
+                        // Parse date
+                        let monthKey;
+                        if (dateStr.includes('/')) {
+                            const parts = dateStr.split('/');
+                            if (parts.length >= 2) {
+                                monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                            }
+                        } else if (dateStr.includes('-')) {
+                            const parts = dateStr.split('-');
+                            if (parts.length >= 2) {
+                                monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                            }
+                        }
+                        
+                        if (!monthKey || isNaN(patientNumber)) return;
+                        
+                        if (!monthlyData[monthKey]) {
+                            monthlyData[monthKey] = {
+                                allRecords: [],
+                                firstVisits: [],
+                                minPatientNumber: Number.MAX_SAFE_INTEGER,
+                                maxPatientNumber: 0
+                            };
+                        }
+                        
+                        monthlyData[monthKey].allRecords.push(row);
+                        
+                        if (row[visitTypeColumn] === '初診') {
+                            monthlyData[monthKey].firstVisits.push(row);
+                        }
+                        
+                        if (patientNumber < monthlyData[monthKey].minPatientNumber) {
+                            monthlyData[monthKey].minPatientNumber = patientNumber;
+                        }
+                        if (patientNumber > monthlyData[monthKey].maxPatientNumber) {
+                            monthlyData[monthKey].maxPatientNumber = patientNumber;
+                        }
+                    });
+                    
+                    // Calculate boundaries
+                    const sortedMonths = Object.keys(monthlyData).sort();
+                    let previousMax = 0;
+                    
+                    if (sortedMonths.length > 0) {
+                        const firstMonthData = monthlyData[sortedMonths[0]];
+                        previousMax = firstMonthData.minPatientNumber > 1 ? 
+                            firstMonthData.minPatientNumber - 1 : 0;
+                    }
+                    
+                    sortedMonths.forEach(month => {
+                        monthlyData[month].boundary = previousMax + 1;
+                        previousMax = monthlyData[month].maxPatientNumber;
+                        
+                        // Classify pure first vs re-first
+                        monthlyData[month].pureFirst = [];
+                        monthlyData[month].reFirst = [];
+                        
+                        const processedPatients = new Set();
+                        
+                        monthlyData[month].firstVisits.forEach(record => {
+                            const patientId = parseInt(record[patientNumberColumn]);
+                            if (!processedPatients.has(patientId)) {
+                                processedPatients.add(patientId);
+                                
+                                if (patientId >= monthlyData[month].boundary) {
+                                    monthlyData[month].pureFirst.push(record);
+                                } else {
+                                    monthlyData[month].reFirst.push(record);
+                                }
+                            }
+                        });
+                    });
+                    
+                    // Show results for all months
+                    output += '<h3>Monthly Summary:</h3>';
+                    sortedMonths.forEach(month => {
+                        const data = monthlyData[month];
+                        output += `<h4>${month}</h4>`;
+                        output += `<ul>`;
+                        output += `<li>Min Patient Number: ${data.minPatientNumber}</li>`;
+                        output += `<li>Max Patient Number: ${data.maxPatientNumber}</li>`;
+                        output += `<li>Boundary: ${data.boundary}</li>`;
+                        output += `<li>Total Records: ${data.allRecords.length}</li>`;
+                        output += `<li>Total First Visits: ${data.firstVisits.length}</li>`;
+                        output += `<li>Pure First: ${data.pureFirst.length}</li>`;
+                        output += `<li>Re-First: ${data.reFirst.length}</li>`;
+                        output += `<li>Pure First Rate: ${data.firstVisits.length > 0 ? 
+                            (data.pureFirst.length / data.firstVisits.length * 100).toFixed(1) : 0}%</li>`;
+                        output += `</ul>`;
+                    });
+                    
+                    // Focus on August 2024
+                    if (monthlyData['2024-08']) {
+                        const august = monthlyData['2024-08'];
+                        output += `<h3>August 2024 Detailed Analysis:</h3>`;
+                        
+                        // Check if boundary seems correct
+                        const julyMax = monthlyData['2024-07'] ? monthlyData['2024-07'].maxPatientNumber : 'N/A';
+                        output += `<p style="color: ${august.boundary === julyMax + 1 ? 'green' : 'red'};">`;
+                        output += `Expected boundary: ${julyMax} + 1 = ${julyMax + 1}, Actual: ${august.boundary}</p>`;
+                        
+                        // Sample classification
+                        output += `<h4>Sample Classifications (first 20 first visits):</h4>`;
+                        output += '<table border="1">';
+                        output += '<tr><th>Patient Number</th><th>Classification</th><th>Reason</th></tr>';
+                        august.firstVisits.slice(0, 20).forEach(record => {
+                            const patientId = parseInt(record[patientNumberColumn]);
+                            const classification = patientId >= august.boundary ? 'PURE' : 'RE';
+                            const reason = patientId >= august.boundary ? 
+                                `${patientId} >= ${august.boundary}` : 
+                                `${patientId} < ${august.boundary}`;
+                            output += `<tr><td>${patientId}</td><td>${classification}</td><td>${reason}</td></tr>`;
+                        });
+                        output += '</table>';
+                    }
+                    
+                    document.getElementById('results').innerHTML = output;
+                },
+                error: function(error) {
+                    document.getElementById('results').innerHTML = 
+                        `<p style="color: red;">Error parsing file: ${error.message}</p>`;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
