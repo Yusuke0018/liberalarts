@@ -752,7 +752,9 @@
             // デバッグ: 最初の行のキーを確認
             if (data.length > 0) {
                 console.log('CSVの列名:', Object.keys(data[0]));
+                console.log('実際の列名:', JSON.stringify(Object.keys(data[0])));
                 console.log('最初のデータ行:', data[0]);
+                console.log('最初のデータ行（JSON）:', JSON.stringify(data[0], null, 2));
             }
             
             // 既存データに新しいデータを追加（重複を避けるため）
@@ -801,7 +803,12 @@
                         errorCount++;
                         if (index < 5) { // 最初の5行だけデバッグ出力
                             console.log(`エラー行 ${index}:`, row);
+                            console.log(`行のキー:`, Object.keys(row));
                             console.log(`日付: ${row['日付']}, 初診・再診: ${row['初診・再診']}`);
+                            // すべての列を表示
+                            for (const [key, value] of Object.entries(row)) {
+                                console.log(`  ${key}: ${value}`);
+                            }
                         }
                         return;
                     }
