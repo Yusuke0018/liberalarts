@@ -779,7 +779,18 @@
             
             // 各月の境界番号を計算（前月の最大番号 + 1）
             const sortedMonths = Object.keys(monthlyData).sort();
-            let previousMax = 16; // 2023年4月の開始が17番なので、その前は16番
+            // 最初の月の最小患者番号-1を初期値とする
+            let previousMax = 0;
+            if (sortedMonths.length > 0) {
+                const firstMonthData = monthlyData[sortedMonths[0]];
+                let minPatientNumber = Number.MAX_SAFE_INTEGER;
+                firstMonthData.allRecords.forEach(record => {
+                    if (record['患者番号'] && record['患者番号'] < minPatientNumber) {
+                        minPatientNumber = record['患者番号'];
+                    }
+                });
+                previousMax = minPatientNumber > 1 ? minPatientNumber - 1 : 0;
+            }
             
             sortedMonths.forEach(month => {
                 monthlyData[month].boundary = previousMax + 1;
