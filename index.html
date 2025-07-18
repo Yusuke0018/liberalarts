@@ -569,9 +569,18 @@
         <div class="chart-container" id="monthlyChart">
             <h2>月別 純初診・再初診推移</h2>
             <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
-                <p style="font-size: 14px; color: #666; margin: 0;">
-                    マウスホイールでズーム、ドラッグでパン操作が可能です。特定期間の詳細を分析できます。
-                </p>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <p style="font-size: 14px; color: #666; margin: 0;">
+                        マウスホイールでズーム、ドラッグでパン操作が可能です。
+                    </p>
+                    <select id="monthlyChartType" onchange="updateMonthlyChartDisplay()" style="padding: 5px; border: 1px solid #ddd; border-radius: 3px;">
+                        <option value="combined">統合表示</option>
+                        <option value="counts">来院数のみ</option>
+                        <option value="rates">比率のみ</option>
+                        <option value="pure">純初診のみ</option>
+                        <option value="re">再初診のみ</option>
+                    </select>
+                </div>
                 <button onclick="resetZoom()" style="padding: 5px 15px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">ズームリセット</button>
             </div>
             <div class="chart-wrapper">
@@ -1187,8 +1196,19 @@
             }
         }
         
+        // グラフタイプ切り替え用関数
+        function updateMonthlyChartDisplay() {
+            const selectedMonths = getSelectedMonths();
+            updateMonthlyChart(selectedMonths);
+        }
+        
         // 月別グラフ更新
         function updateMonthlyChart(months) {
+            const chartType = document.getElementById('monthlyChartType')?.value || 'combined';
+            renderMonthlyChart(months, chartType);
+        }
+        
+        function renderMonthlyChart(months, chartType = 'combined') {
             const ctx = document.getElementById('monthlyCanvas').getContext('2d');
             
             const labels = months.map(month => {
@@ -1218,6 +1238,22 @@
                 return total > 0 ? (reFirst / total * 100).toFixed(1) : 0;
             });
             
+            // 初診内での純初診率
+            const pureRateInFirstData = months.map(month => {
+                const pure = monthlyData[month].pureFirst.length;
+                const reFirst = monthlyData[month].reFirst.length;
+                const totalFirst = pure + reFirst;
+                return totalFirst > 0 ? (pure / totalFirst * 100).toFixed(1) : 0;
+            });
+            
+            // 初診内での再初診率
+            const reRateInFirstData = months.map(month => {
+                const pure = monthlyData[month].pureFirst.length;
+                const reFirst = monthlyData[month].reFirst.length;
+                const totalFirst = pure + reFirst;
+                return totalFirst > 0 ? (reFirst / totalFirst * 100).toFixed(1) : 0;
+            });
+            
             // 閾値を取得
             const lowThreshold = parseFloat(document.getElementById('lowThreshold').value);
             const mediumThreshold = parseFloat(document.getElementById('mediumThreshold').value);
@@ -1234,11 +1270,12 @@
                 currentChart.destroy();
             }
             
-            currentChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
+            let datasets = [];
+            let yScales = {};
+            
+            switch (chartType) {
+                case 'combined':
+                    datasets = [
                         {
                             label: '純初診',
                             data: pureData,
@@ -1277,13 +1314,8 @@
                             borderWidth: 3,
                             tension: 0.1
                         }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    aspectRatio: 2,
-                    scales: {
+                    ];
+                    yScales = {
                         y: {
                             type: 'linear',
                             display: true,
@@ -1301,13 +1333,240 @@
                             max: 100,
                             title: {
                                 display: true,
+                                text: '比率（%）'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    };
+                    break;
+                    
+                case 'counts':
+                    datasets = [
+                        {
+                            label: '純初診',
+                            data: pureData,
+                            backgroundColor: '#3498db'
+                        },
+                        {
+                            label: '再初診',
+                            data: reData,
+                            backgroundColor: '#2ecc71'
+                        },
+                        {
+                            label: '再診',
+                            data: returnData,
+                            backgroundColor: '#e67e22'
+                        }
+                    ];
+                    yScales = {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '患者数（人）'
+                            }
+                        }
+                    };
+                    break;
+                    
+                case 'rates':
+                    datasets = [
+                        {
+                            label: '純初診率（全患者中）',
+                            data: pureRateData,
+                            type: 'line',
+                            borderColor: lineColors,
+                            backgroundColor: 'transparent',
+                            borderWidth: 3,
+                            tension: 0.1,
+                            segment: {
+                                borderColor: ctx => {
+                                    const index = ctx.p0DataIndex;
+                                    return lineColors[index];
+                                }
+                            }
+                        },
+                        {
+                            label: '再初診率（全患者中）',
+                            data: reFirstRateData,
+                            type: 'line',
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'transparent',
+                            borderWidth: 3,
+                            tension: 0.1
+                        },
+                        {
+                            label: '純初診率（初診内）',
+                            data: pureRateInFirstData,
+                            type: 'line',
+                            borderColor: '#3498db',
+                            borderDash: [5, 5],
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.1
+                        },
+                        {
+                            label: '再初診率（初診内）',
+                            data: reRateInFirstData,
+                            type: 'line',
+                            borderColor: '#2ecc71',
+                            borderDash: [5, 5],
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }
+                    ];
+                    yScales = {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            min: 0,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: '比率（%）'
+                            }
+                        }
+                    };
+                    break;
+                    
+                case 'pure':
+                    datasets = [
+                        {
+                            label: '純初診数',
+                            data: pureData,
+                            backgroundColor: '#3498db',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '純初診率（全患者中）',
+                            data: pureRateData,
+                            type: 'line',
+                            borderColor: lineColors,
+                            backgroundColor: 'transparent',
+                            yAxisID: 'y1',
+                            borderWidth: 3,
+                            tension: 0.1,
+                            segment: {
+                                borderColor: ctx => {
+                                    const index = ctx.p0DataIndex;
+                                    return lineColors[index];
+                                }
+                            }
+                        },
+                        {
+                            label: '純初診率（初診内）',
+                            data: pureRateInFirstData,
+                            type: 'line',
+                            borderColor: '#3498db',
+                            borderDash: [5, 5],
+                            backgroundColor: 'transparent',
+                            yAxisID: 'y1',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }
+                    ];
+                    yScales = {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '純初診数（人）'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            title: {
+                                display: true,
                                 text: '純初診率（%）'
                             },
                             grid: {
                                 drawOnChartArea: false
                             }
                         }
-                    },
+                    };
+                    break;
+                    
+                case 're':
+                    datasets = [
+                        {
+                            label: '再初診数',
+                            data: reData,
+                            backgroundColor: '#2ecc71',
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '再初診率（全患者中）',
+                            data: reFirstRateData,
+                            type: 'line',
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'transparent',
+                            yAxisID: 'y1',
+                            borderWidth: 3,
+                            tension: 0.1
+                        },
+                        {
+                            label: '再初診率（初診内）',
+                            data: reRateInFirstData,
+                            type: 'line',
+                            borderColor: '#2ecc71',
+                            borderDash: [5, 5],
+                            backgroundColor: 'transparent',
+                            yAxisID: 'y1',
+                            borderWidth: 2,
+                            tension: 0.1
+                        }
+                    ];
+                    yScales = {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '再初診数（人）'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: '再初診率（%）'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    };
+                    break;
+            }
+            
+            currentChart = new Chart(ctx, {
+                type: chartType === 'rates' ? 'line' : 'bar',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    aspectRatio: 2,
+                    scales: yScales,
                     plugins: {
                         tooltip: {
                             callbacks: {
@@ -1316,7 +1575,7 @@
                                     if (label) {
                                         label += ': ';
                                     }
-                                    if (context.dataset.label === '純初診率') {
+                                    if (label.includes('率')) {
                                         label += context.parsed.y + '%';
                                     } else {
                                         label += context.parsed.y + '人';
