@@ -6,6 +6,7 @@
     <title>リベ大総合クリニック 患者分析システム</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -93,7 +94,7 @@
         
         .summary-cards {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
             display: none;
@@ -385,6 +386,50 @@
         .export-excel:hover {
             background-color: #229954;
         }
+        
+        .threshold-settings {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .threshold-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .threshold-input input {
+            width: 80px;
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .warning-indicator {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
+        .warning-low {
+            background-color: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        
+        .warning-medium {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
     </style>
 </head>
 <body>
@@ -416,6 +461,7 @@
             <div class="export-buttons">
                 <button class="export-button export-pdf" onclick="exportToPDF()">PDFで出力</button>
                 <button class="export-button export-excel" onclick="exportToExcel()">Excelで出力</button>
+                <button class="export-button" onclick="generateSummaryReport()" style="background-color: #8e44ad; color: white;">サマリーレポート生成</button>
             </div>
         </div>
         
@@ -453,6 +499,12 @@
                 <div class="value" id="pureRateValue">-</div>
                 <div class="sub-value" id="pureRateChange">-</div>
             </div>
+            
+            <div class="summary-card rate" style="border-left-color: #9b59b6;">
+                <h3>再初診率</h3>
+                <div class="value" id="reRateValue">-</div>
+                <div class="sub-value" id="reRateChange">-</div>
+            </div>
         </div>
         
         <div class="tabs" id="tabs">
@@ -463,8 +515,27 @@
             <button class="tab" onclick="switchTab('periodComparison')">期間比較</button>
         </div>
         
+        <div class="threshold-settings" id="thresholdSettings">
+            <h3>純初診率警告閾値設定</h3>
+            <div class="threshold-input">
+                <label>低警告（赤）：</label>
+                <input type="number" id="lowThreshold" value="40" min="0" max="100" step="1">
+                <span>%以下</span>
+                <label style="margin-left: 20px;">中警告（黄）：</label>
+                <input type="number" id="mediumThreshold" value="50" min="0" max="100" step="1">
+                <span>%以下</span>
+                <button onclick="updateThresholds()" style="margin-left: 20px; padding: 5px 15px; background-color: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">適用</button>
+            </div>
+        </div>
+        
         <div class="chart-container" id="monthlyChart">
             <h2>月別 純初診・再初診推移</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0;">
+                <p style="font-size: 14px; color: #666; margin: 0;">
+                    マウスホイールでズーム、ドラッグでパン操作が可能です。特定期間の詳細を分析できます。
+                </p>
+                <button onclick="resetZoom()" style="padding: 5px 15px; background-color: #95a5a6; color: white; border: none; border-radius: 3px; cursor: pointer;">ズームリセット</button>
+            </div>
             <div class="chart-wrapper">
                 <canvas id="monthlyCanvas"></canvas>
             </div>
@@ -472,6 +543,10 @@
         
         <div class="chart-container" id="regionalChart" style="display: none;">
             <h2>地域別 患者分布</h2>
+            <div style="text-align: right; margin-bottom: 10px;">
+                <button id="regionalBarBtn" onclick="switchRegionalChart('bar')" style="padding: 5px 15px; margin-right: 5px; background-color: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">棒グラフ</button>
+                <button id="regionalPieBtn" onclick="switchRegionalChart('pie')" style="padding: 5px 15px; background-color: #ecf0f1; color: #333; border: none; border-radius: 3px; cursor: pointer;">円グラフ</button>
+            </div>
             <div class="chart-wrapper">
                 <canvas id="regionalCanvas"></canvas>
             </div>
@@ -622,6 +697,7 @@
             document.getElementById('tabs').style.display = 'flex';
             document.getElementById('monthlyChart').style.display = 'block';
             document.getElementById('regionalTable').style.display = 'block';
+            document.getElementById('thresholdSettings').style.display = 'block';
             
             // 日付範囲を設定
             setDateRange();
@@ -827,11 +903,13 @@
             const reCount = lastData.reFirst.length;
             const totalCount = pureCount + reCount;
             const pureRate = totalCount > 0 ? (pureCount / totalCount * 100).toFixed(1) : 0;
+            const reRate = totalCount > 0 ? (reCount / totalCount * 100).toFixed(1) : 0;
             
             document.getElementById('pureFirstValue').textContent = pureCount.toLocaleString() + '人';
             document.getElementById('reFirstValue').textContent = reCount.toLocaleString() + '人';
             document.getElementById('totalFirstValue').textContent = totalCount.toLocaleString() + '人';
             document.getElementById('pureRateValue').textContent = pureRate + '%';
+            document.getElementById('reRateValue').textContent = reRate + '%';
             
             // 前月比・前年比を計算
             if (prevMonth && monthlyData[prevMonth]) {
@@ -856,16 +934,23 @@
                 const lastYearData = monthlyData[lastYearMonth];
                 const lastYearTotal = lastYearData.pureFirst.length + lastYearData.reFirst.length;
                 if (lastYearTotal > 0) {
-                    const lastYearRate = (lastYearData.pureFirst.length / lastYearTotal * 100).toFixed(1);
-                    const rateChange = (parseFloat(pureRate) - parseFloat(lastYearRate)).toFixed(1);
+                    const lastYearPureRate = (lastYearData.pureFirst.length / lastYearTotal * 100).toFixed(1);
+                    const lastYearReRate = (lastYearData.reFirst.length / lastYearTotal * 100).toFixed(1);
+                    const pureRateChange = (parseFloat(pureRate) - parseFloat(lastYearPureRate)).toFixed(1);
+                    const reRateChange = (parseFloat(reRate) - parseFloat(lastYearReRate)).toFixed(1);
                     
                     const [lyYear, lyMon] = lastYearMonth.split('-');
-                    const changeClass = rateChange > 0 ? 'increase' : 'decrease';
+                    const pureChangeClass = pureRateChange > 0 ? 'increase' : 'decrease';
+                    const reChangeClass = reRateChange > 0 ? 'increase' : 'decrease';
+                    
                     document.getElementById('pureRateChange').innerHTML = 
-                        `${lyYear}年${parseInt(lyMon)}月比: <span class="${changeClass}">${rateChange > 0 ? '+' : ''}${rateChange}pt</span>`;
+                        `${lyYear}年${parseInt(lyMon)}月比: <span class="${pureChangeClass}">${pureRateChange > 0 ? '+' : ''}${pureRateChange}pt</span>`;
+                    document.getElementById('reRateChange').innerHTML = 
+                        `${lyYear}年${parseInt(lyMon)}月比: <span class="${reChangeClass}">${reRateChange > 0 ? '+' : ''}${reRateChange}pt</span>`;
                 }
             } else {
                 document.getElementById('pureRateChange').textContent = '前年同月データなし';
+                document.getElementById('reRateChange').textContent = '前年同月データなし';
             }
         }
         
@@ -885,6 +970,18 @@
                 const re = monthlyData[month].reFirst.length;
                 const total = pure + re;
                 return total > 0 ? (pure / total * 100).toFixed(1) : 0;
+            });
+            
+            // 閾値を取得
+            const lowThreshold = parseFloat(document.getElementById('lowThreshold').value);
+            const mediumThreshold = parseFloat(document.getElementById('mediumThreshold').value);
+            
+            // 警告色の設定
+            const lineColors = rateData.map(rate => {
+                const rateValue = parseFloat(rate);
+                if (rateValue <= lowThreshold) return '#e74c3c';
+                if (rateValue <= mediumThreshold) return '#f39c12';
+                return '#27ae60';
             });
             
             if (currentChart) {
@@ -912,11 +1009,17 @@
                             label: '純初診率',
                             data: rateData,
                             type: 'line',
-                            borderColor: '#e74c3c',
+                            borderColor: lineColors,
                             backgroundColor: 'transparent',
                             yAxisID: 'y1',
                             borderWidth: 3,
-                            tension: 0.1
+                            tension: 0.1,
+                            segment: {
+                                borderColor: ctx => {
+                                    const index = ctx.p0DataIndex;
+                                    return lineColors[index];
+                                }
+                            }
                         }
                     ]
                 },
@@ -964,6 +1067,47 @@
                                     }
                                     return label;
                                 }
+                            }
+                        },
+                        zoom: {
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                            },
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            formatter: (value, ctx) => {
+                                if (ctx.dataset.type === 'line') {
+                                    const rate = parseFloat(value);
+                                    if (rate <= lowThreshold) return value + '%⚠';
+                                    if (rate <= mediumThreshold) return value + '%!';
+                                    return value + '%';
+                                }
+                                return value;
+                            },
+                            color: (ctx) => {
+                                if (ctx.dataset.type === 'line') {
+                                    const value = parseFloat(ctx.dataset.data[ctx.dataIndex]);
+                                    if (value <= lowThreshold) return '#e74c3c';
+                                    if (value <= mediumThreshold) return '#f39c12';
+                                    return '#27ae60';
+                                }
+                                return '#666';
+                            },
+                            font: {
+                                weight: 'bold',
+                                size: 10
                             }
                         }
                     }
@@ -1067,8 +1211,15 @@
             }
         }
         
+        // 地域別グラフの現在のタイプ
+        let currentRegionalChartType = 'bar';
+        
         // 地域別グラフ更新
-        function updateRegionalChart() {
+        function updateRegionalChart(chartType = null) {
+            if (chartType) {
+                currentRegionalChartType = chartType;
+            }
+            
             const startMonth = document.getElementById('startMonth').value;
             const endMonth = document.getElementById('endMonth').value;
             
@@ -1110,15 +1261,59 @@
                 regionalChartInstance.destroy();
             }
             
-            regionalChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: topRegions.map(r => r.region),
-                    datasets: [
-                        {
-                            label: '純初診',
-                            data: topRegions.map(r => r.pure),
-                            backgroundColor: '#3498db'
+            if (currentRegionalChartType === 'pie') {
+                // 円グラフの場合
+                const pieData = topRegions.map(r => r.total);
+                const pieLabels = topRegions.map(r => `${r.region} (${r.total}人)`);
+                const colors = [
+                    '#3498db', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6',
+                    '#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#d35400',
+                    '#c0392b', '#27ae60', '#2980b9', '#8e44ad', '#16a085'
+                ];
+                
+                regionalChartInstance = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: pieLabels,
+                        datasets: [{
+                            data: pieData,
+                            backgroundColor: colors.slice(0, topRegions.length)
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const region = topRegions[context.dataIndex];
+                                        const percentage = ((region.total / topRegions.reduce((sum, r) => sum + r.total, 0)) * 100).toFixed(1);
+                                        return [
+                                            `${region.region}: ${region.total}人 (${percentage}%)`,
+                                            `純初診: ${region.pure}人`,
+                                            `再初診: ${region.re}人`
+                                        ];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // 棒グラフの場合
+                regionalChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: topRegions.map(r => r.region),
+                        datasets: [
+                            {
+                                label: '純初診',
+                                data: topRegions.map(r => r.pure),
+                                backgroundColor: '#3498db'
                         },
                         {
                             label: '再初診',
@@ -1144,6 +1339,25 @@
                     }
                 }
             });
+            }
+        }
+        
+        // 地域別グラフタイプ切り替え
+        function switchRegionalChart(type) {
+            // ボタンのスタイル更新
+            if (type === 'bar') {
+                document.getElementById('regionalBarBtn').style.backgroundColor = '#3498db';
+                document.getElementById('regionalBarBtn').style.color = 'white';
+                document.getElementById('regionalPieBtn').style.backgroundColor = '#ecf0f1';
+                document.getElementById('regionalPieBtn').style.color = '#333';
+            } else {
+                document.getElementById('regionalPieBtn').style.backgroundColor = '#3498db';
+                document.getElementById('regionalPieBtn').style.color = 'white';
+                document.getElementById('regionalBarBtn').style.backgroundColor = '#ecf0f1';
+                document.getElementById('regionalBarBtn').style.color = '#333';
+            }
+            
+            updateRegionalChart(type);
         }
         
         // 前年・前月比較グラフ
@@ -1359,6 +1573,13 @@
             setTimeout(() => {
                 errorDiv.style.display = 'none';
             }, 5000);
+        }
+        
+        // ズームリセット関数
+        function resetZoom() {
+            if (currentChart) {
+                currentChart.resetZoom();
+            }
         }
         
         function showLoading(show) {
@@ -1770,6 +1991,179 @@
             // Excelファイルを保存
             const fileName = `患者分析レポート_${startMonth}_${endMonth}.xlsx`;
             XLSX.writeFile(wb, fileName);
+        }
+        
+        // 閾値更新
+        function updateThresholds() {
+            updateDisplay();
+        }
+        
+        // サマリーレポート生成
+        function generateSummaryReport() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'pt', 'a4');
+            
+            // 日付範囲
+            const startMonth = document.getElementById('startMonth').value;
+            const endMonth = document.getElementById('endMonth').value;
+            const [startYear, startMon] = startMonth.split('-');
+            const [endYear, endMon] = endMonth.split('-');
+            
+            // タイトル
+            doc.setFontSize(20);
+            doc.text('患者分析サマリーレポート', 40, 40);
+            
+            doc.setFontSize(14);
+            doc.text('リベ大総合クリニック', 40, 65);
+            
+            doc.setFontSize(12);
+            doc.text(`分析期間: ${startYear}年${parseInt(startMon)}月～${endYear}年${parseInt(endMon)}月`, 40, 85);
+            doc.text(`作成日: ${new Date().toLocaleDateString('ja-JP')}`, 40, 105);
+            
+            // 1. 期間概要
+            doc.setFontSize(16);
+            doc.text('1. 期間概要', 40, 140);
+            
+            const months = Object.keys(monthlyData)
+                .filter(month => month >= startMonth && month <= endMonth)
+                .sort();
+            
+            let totalPure = 0;
+            let totalRe = 0;
+            months.forEach(month => {
+                totalPure += monthlyData[month].pureFirst.length;
+                totalRe += monthlyData[month].reFirst.length;
+            });
+            const grandTotal = totalPure + totalRe;
+            const avgPureRate = grandTotal > 0 ? (totalPure / grandTotal * 100).toFixed(1) : 0;
+            
+            doc.setFontSize(12);
+            doc.text(`• 分析対象月数: ${months.length}ヶ月`, 60, 165);
+            doc.text(`• 純初診総数: ${totalPure.toLocaleString()}人`, 60, 185);
+            doc.text(`• 再初診総数: ${totalRe.toLocaleString()}人`, 60, 205);
+            doc.text(`• 初診合計: ${grandTotal.toLocaleString()}人`, 60, 225);
+            doc.text(`• 期間平均純初診率: ${avgPureRate}%`, 60, 245);
+            
+            // 2. 月別傾向分析
+            doc.setFontSize(16);
+            doc.text('2. 月別傾向分析', 40, 280);
+            
+            // 最高・最低純初診率
+            let maxRate = 0;
+            let minRate = 100;
+            let maxMonth = '';
+            let minMonth = '';
+            
+            months.forEach(month => {
+                const data = monthlyData[month];
+                const pure = data.pureFirst.length;
+                const re = data.reFirst.length;
+                const total = pure + re;
+                const rate = total > 0 ? (pure / total * 100) : 0;
+                
+                if (rate > maxRate) {
+                    maxRate = rate;
+                    maxMonth = month;
+                }
+                if (rate < minRate) {
+                    minRate = rate;
+                    minMonth = month;
+                }
+            });
+            
+            doc.setFontSize(12);
+            doc.text(`• 最高純初診率: ${maxRate.toFixed(1)}% (${maxMonth.replace('-', '年')}月)`, 60, 305);
+            doc.text(`• 最低純初診率: ${minRate.toFixed(1)}% (${minMonth.replace('-', '年')}月)`, 60, 325);
+            
+            // 3. 地域別分析
+            doc.setFontSize(16);
+            doc.text('3. 地域別分析（上位5地域）', 40, 360);
+            
+            const regionalTotal = {};
+            months.forEach(month => {
+                const monthRegional = monthlyData[month].regional;
+                Object.keys(monthRegional.pure).forEach(region => {
+                    if (!regionalTotal[region]) {
+                        regionalTotal[region] = { pure: 0, re: 0 };
+                    }
+                    regionalTotal[region].pure += monthRegional.pure[region];
+                    regionalTotal[region].re += monthRegional.re[region];
+                });
+            });
+            
+            const topRegions = Object.entries(regionalTotal)
+                .map(([region, data]) => ({
+                    region,
+                    total: data.pure + data.re,
+                    pureRate: data.pure + data.re > 0 ? (data.pure / (data.pure + data.re) * 100).toFixed(1) : 0
+                }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 5);
+            
+            doc.setFontSize(12);
+            let yPos = 385;
+            topRegions.forEach((region, index) => {
+                doc.text(`${index + 1}. ${region.region}: ${region.total.toLocaleString()}人 (純初診率: ${region.pureRate}%)`, 60, yPos);
+                yPos += 20;
+            });
+            
+            // 4. 改善提案
+            doc.addPage();
+            doc.setFontSize(16);
+            doc.text('4. 改善提案', 40, 40);
+            
+            doc.setFontSize(12);
+            const suggestions = [];
+            
+            if (parseFloat(avgPureRate) < 50) {
+                suggestions.push('• 純初診率が50%を下回っています。新規患者獲得の施策を検討してください。');
+            }
+            
+            if (minRate < 40) {
+                suggestions.push('• 特定月の純初診率が40%を下回っています。季節要因の分析が必要です。');
+            }
+            
+            const westWardData = regionalTotal['西区'];
+            if (westWardData) {
+                const westTotal = westWardData.pure + westWardData.re;
+                const westPercentage = (westTotal / grandTotal * 100).toFixed(1);
+                if (parseFloat(westPercentage) < 20) {
+                    suggestions.push('• 地元（西区）からの患者比率が低い可能性があります。地域密着の施策を検討してください。');
+                }
+            }
+            
+            if (suggestions.length === 0) {
+                suggestions.push('• 全体的に良好な数値を維持しています。現在の施策を継続してください。');
+            }
+            
+            yPos = 65;
+            suggestions.forEach(suggestion => {
+                const lines = doc.splitTextToSize(suggestion, 500);
+                doc.text(lines, 60, yPos);
+                yPos += lines.length * 15 + 10;
+            });
+            
+            // 5. 次期アクション
+            doc.setFontSize(16);
+            doc.text('5. 推奨アクション', 40, yPos + 30);
+            
+            doc.setFontSize(12);
+            const actions = [
+                '1. 月別の純初診率推移を定期的にモニタリング',
+                '2. 低純初診率月の要因分析（季節性、キャンペーン効果等）',
+                '3. 地域別マーケティング戦略の見直し',
+                '4. 患者満足度調査による再初診要因の把握'
+            ];
+            
+            yPos += 55;
+            actions.forEach(action => {
+                doc.text(action, 60, yPos);
+                yPos += 20;
+            });
+            
+            // PDFを保存
+            const fileName = `サマリーレポート_${startMonth}_${endMonth}.pdf`;
+            doc.save(fileName);
         }
     </script>
 </body>
