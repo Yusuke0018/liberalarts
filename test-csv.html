@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>CSVテスト</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>CSVテスト</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <pre id="output"></pre>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            Papa.parse(file, {
+                header: true,
+                encoding: 'Shift-JIS',
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const output = document.getElementById('output');
+                    output.textContent = 'データ数: ' + results.data.length + '\n\n';
+                    
+                    if (results.data.length > 0) {
+                        output.textContent += '列名:\n';
+                        output.textContent += JSON.stringify(Object.keys(results.data[0]), null, 2) + '\n\n';
+                        
+                        output.textContent += '最初の3行:\n';
+                        for (let i = 0; i < Math.min(3, results.data.length); i++) {
+                            output.textContent += JSON.stringify(results.data[i], null, 2) + '\n';
+                        }
+                    }
+                },
+                error: function(error) {
+                    document.getElementById('output').textContent = 'エラー: ' + error.message;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
