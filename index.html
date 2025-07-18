@@ -362,40 +362,6 @@
             display: none;
         }
         
-        .threshold-input {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        
-        .threshold-input input {
-            width: 80px;
-            padding: 5px 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        
-        .warning-indicator {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-            font-weight: bold;
-            margin-left: 5px;
-        }
-        
-        .warning-low {
-            background-color: #fee;
-            color: #c33;
-            border: 1px solid #fcc;
-        }
-        
-        .warning-medium {
-            background-color: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-        }
     </style>
 </head>
 <body>
@@ -514,18 +480,6 @@
             <button class="tab" onclick="switchTab('periodComparison')">期間比較</button>
         </div>
         
-        <div class="threshold-settings" id="thresholdSettings">
-            <h3>純初診率警告閾値設定</h3>
-            <div class="threshold-input">
-                <label>低警告（赤）：</label>
-                <input type="number" id="lowThreshold" value="40" min="0" max="100" step="1">
-                <span>%以下</span>
-                <label style="margin-left: 20px;">中警告（黄）：</label>
-                <input type="number" id="mediumThreshold" value="50" min="0" max="100" step="1">
-                <span>%以下</span>
-                <button onclick="updateThresholds()" style="margin-left: 20px; padding: 5px 15px; background-color: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">適用</button>
-            </div>
-        </div>
         
         <div class="chart-container" id="monthlyChart">
             <h2>月別 純初診・再初診推移</h2>
@@ -767,7 +721,6 @@
                 document.getElementById('tabs').style.display = 'flex';
                 document.getElementById('monthlyChart').style.display = 'block';
                 document.getElementById('regionalTable').style.display = 'block';
-                document.getElementById('thresholdSettings').style.display = 'block';
                 
                 // 表示を更新
                 updateDisplay();
@@ -1224,17 +1177,6 @@
                 return totalFirst > 0 ? (reFirst / totalFirst * 100).toFixed(1) : 0;
             });
             
-            // 閾値を取得
-            const lowThreshold = parseFloat(document.getElementById('lowThreshold').value);
-            const mediumThreshold = parseFloat(document.getElementById('mediumThreshold').value);
-            
-            // 警告色の設定（純初診率用）
-            const lineColors = pureRateData.map(rate => {
-                const rateValue = parseFloat(rate);
-                if (rateValue <= lowThreshold) return '#e74c3c';
-                if (rateValue <= mediumThreshold) return '#f39c12';
-                return '#27ae60';
-            });
             
             if (currentChart) {
                 currentChart.destroy();
@@ -1262,17 +1204,11 @@
                             label: '純初診率',
                             data: pureRateData,
                             type: 'line',
-                            borderColor: lineColors,
+                            borderColor: '#3498db',
                             backgroundColor: 'transparent',
                             yAxisID: 'y1',
                             borderWidth: 3,
                             tension: 0.1,
-                            segment: {
-                                borderColor: ctx => {
-                                    const index = ctx.p0DataIndex;
-                                    return lineColors[index];
-                                }
-                            }
                         },
                         {
                             label: '再初診率',
@@ -1349,16 +1285,10 @@
                             label: '純初診率（全患者中）',
                             data: pureRateData,
                             type: 'line',
-                            borderColor: lineColors,
+                            borderColor: '#3498db',
                             backgroundColor: 'transparent',
                             borderWidth: 3,
                             tension: 0.1,
-                            segment: {
-                                borderColor: ctx => {
-                                    const index = ctx.p0DataIndex;
-                                    return lineColors[index];
-                                }
-                            }
                         },
                         {
                             label: '再初診率（全患者中）',
@@ -1417,17 +1347,11 @@
                             label: '純初診率（全患者中）',
                             data: pureRateData,
                             type: 'line',
-                            borderColor: lineColors,
+                            borderColor: '#3498db',
                             backgroundColor: 'transparent',
                             yAxisID: 'y1',
                             borderWidth: 3,
                             tension: 0.1,
-                            segment: {
-                                borderColor: ctx => {
-                                    const index = ctx.p0DataIndex;
-                                    return lineColors[index];
-                                }
-                            }
                         },
                         {
                             label: '純初診率（初診内）',
@@ -1574,22 +1498,11 @@
                             align: 'top',
                             formatter: (value, ctx) => {
                                 if (ctx.dataset.type === 'line') {
-                                    const rate = parseFloat(value);
-                                    if (rate <= lowThreshold) return value + '%⚠';
-                                    if (rate <= mediumThreshold) return value + '%!';
                                     return value + '%';
                                 }
                                 return value;
                             },
-                            color: (ctx) => {
-                                if (ctx.dataset.type === 'line') {
-                                    const value = parseFloat(ctx.dataset.data[ctx.dataIndex]);
-                                    if (value <= lowThreshold) return '#e74c3c';
-                                    if (value <= mediumThreshold) return '#f39c12';
-                                    return '#27ae60';
-                                }
-                                return '#666';
-                            },
+                            color: '#666',
                             font: {
                                 weight: 'bold',
                                 size: 10
@@ -2236,7 +2149,6 @@
                 document.getElementById('comparisonChart').style.display = 'none';
                 document.getElementById('wardChart').style.display = 'none';
                 document.getElementById('regionalTable').style.display = 'none';
-                document.getElementById('thresholdSettings').style.display = 'none';
                 document.getElementById('periodComparisonContainer').style.display = 'none';
                 document.getElementById('dataInfo').style.display = 'none';
                 
@@ -2667,10 +2579,6 @@
             XLSX.writeFile(wb, fileName);
         }
         
-        // 閾値更新
-        function updateThresholds() {
-            updateDisplay();
-        }
         
         // サマリーレポート生成
         function generateSummaryReport() {
