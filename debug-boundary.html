@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>境界計算デバッグ</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>境界計算デバッグツール</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <div id="output"></div>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            Papa.parse(file, {
+                header: true,
+                encoding: 'Shift-JIS',
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    analyzeData(results.data);
+                }
+            });
+        });
+        
+        function analyzeData(data) {
+            const monthlyData = {};
+            const output = document.getElementById('output');
+            let html = '<h2>月別分析結果</h2>';
+            
+            // 月ごとにグループ化
+            data.forEach(row => {
+                if (!row['日付'] || !row['初診・再診']) return;
+                
+                const dateStr = row['日付'];
+                let monthKey;
+                
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length >= 2) {
+                        monthKey = `${parts[0]}-${parts[1].padStart(2, '0')}`;
+                    }
+                }
+                
+                if (!monthKey || monthKey === 'undefined-undefined') return;
+                
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = {
+                        allRecords: [],
+                        firstVisits: [],
+                        maxPatientNumber: 0,
+                        minPatientNumber: Number.MAX_SAFE_INTEGER
+                    };
+                }
+                
+                monthlyData[monthKey].allRecords.push(row);
+                
+                if (row['初診・再診'] === '初診') {
+                    monthlyData[monthKey].firstVisits.push(row);
+                }
+                
+                if (row['患者番号'] > monthlyData[monthKey].maxPatientNumber) {
+                    monthlyData[monthKey].maxPatientNumber = row['患者番号'];
+                }
+                if (row['患者番号'] < monthlyData[monthKey].minPatientNumber) {
+                    monthlyData[monthKey].minPatientNumber = row['患者番号'];
+                }
+            });
+            
+            // 境界計算
+            const sortedMonths = Object.keys(monthlyData).sort();
+            let previousMax = 0;
+            
+            html += '<table border="1" style="border-collapse: collapse; margin: 20px 0;">';
+            html += '<tr><th>月</th><th>最小患者番号</th><th>最大患者番号</th><th>境界番号</th><th>初診数</th><th>純初診数</th><th>再初診数</th></tr>';
+            
+            sortedMonths.forEach((month, idx) => {
+                let boundary;
+                const currentMin = monthlyData[month].minPatientNumber;
+                
+                if (idx === 0) {
+                    boundary = currentMin > 1 ? currentMin - 1 : 0;
+                } else if (previousMax > 1000000 && currentMin < 100000) {
+                    // リセット検出
+                    let firstVisitMin = Number.MAX_SAFE_INTEGER;
+                    monthlyData[month].firstVisits.forEach(record => {
+                        if (record['患者番号'] < firstVisitMin) {
+                            firstVisitMin = record['患者番号'];
+                        }
+                    });
+                    boundary = firstVisitMin > 100 ? firstVisitMin - 100 : 0;
+                    html += `<tr style="background-color: #ffcccc;">`;
+                } else {
+                    boundary = previousMax + 1;
+                    html += '<tr>';
+                }
+                
+                // 純初診と再初診を分類
+                let pureCount = 0;
+                let reCount = 0;
+                const processedPatients = new Set();
+                
+                monthlyData[month].firstVisits.forEach(record => {
+                    const patientId = record['患者番号'];
+                    if (!processedPatients.has(patientId)) {
+                        processedPatients.add(patientId);
+                        if (patientId >= boundary) {
+                            pureCount++;
+                        } else {
+                            reCount++;
+                        }
+                    }
+                });
+                
+                html += `<td>${month}</td>`;
+                html += `<td>${monthlyData[month].minPatientNumber}</td>`;
+                html += `<td>${monthlyData[month].maxPatientNumber}</td>`;
+                html += `<td>${boundary}</td>`;
+                html += `<td>${monthlyData[month].firstVisits.length}</td>`;
+                html += `<td>${pureCount}</td>`;
+                html += `<td>${reCount}</td>`;
+                html += '</tr>';
+                
+                previousMax = monthlyData[month].maxPatientNumber;
+            });
+            
+            html += '</table>';
+            
+            // 8月の詳細
+            if (monthlyData['2024-08']) {
+                html += '<h3>2024年8月の初診患者番号分布</h3>';
+                const augustFirst = monthlyData['2024-08'].firstVisits.map(r => r['患者番号']).sort((a, b) => a - b);
+                const boundary = previousMax + 1;
+                
+                html += `<p>7月最大番号: ${monthlyData['2024-07'] ? monthlyData['2024-07'].maxPatientNumber : 'N/A'}</p>`;
+                html += `<p>8月境界番号: ${boundary}</p>`;
+                html += `<p>8月初診患者数: ${augustFirst.length}</p>`;
+                html += `<p>8月初診最小番号: ${Math.min(...augustFirst)}</p>`;
+                html += `<p>8月初診最大番号: ${Math.max(...augustFirst)}</p>`;
+                
+                const pure = augustFirst.filter(n => n >= boundary);
+                const re = augustFirst.filter(n => n < boundary);
+                
+                html += `<p>純初診数（${boundary}以上）: ${pure.length}</p>`;
+                html += `<p>再初診数（${boundary}未満）: ${re.length}</p>`;
+            }
+            
+            output.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

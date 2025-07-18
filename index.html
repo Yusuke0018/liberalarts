@@ -844,31 +844,13 @@
             }
             
             sortedMonths.forEach((month, idx) => {
-                // 現在の月の最小患者番号を取得
-                let currentMinPatientNumber = Number.MAX_SAFE_INTEGER;
-                monthlyData[month].allRecords.forEach(record => {
-                    if (record['患者番号'] && record['患者番号'] < currentMinPatientNumber) {
-                        currentMinPatientNumber = record['患者番号'];
-                    }
-                });
+                // 通常の境界計算（前月の最大番号 + 1）
+                monthlyData[month].boundary = previousMax + 1;
                 
-                // 患者番号がリセットされた場合の検出
-                // 前月の最大値が100万を超えていて、現在月の最小値が10万未満の場合も考慮
-                if (idx > 0 && (currentMinPatientNumber < previousMax * 0.9 || (previousMax > 1000000 && currentMinPatientNumber < 100000))) {
-                    // 患者番号がリセットされた場合は、現在月の初診の最小患者番号を基準にする
-                    let firstVisitMin = Number.MAX_SAFE_INTEGER;
-                    monthlyData[month].firstVisits.forEach(record => {
-                        if (record['患者番号'] && record['患者番号'] < firstVisitMin) {
-                            firstVisitMin = record['患者番号'];
-                        }
-                    });
-                    
-                    // 初診の最小患者番号より少し小さい値を境界とする
-                    monthlyData[month].boundary = firstVisitMin > 100 ? firstVisitMin - 100 : 0;
-                    console.log(`${month}: 患者番号リセット検出 - 境界: ${monthlyData[month].boundary}, 初診最小: ${firstVisitMin}, 前月最大: ${previousMax}`);
-                } else {
-                    // 通常の境界計算
-                    monthlyData[month].boundary = previousMax + 1;
+                // デバッグ用ログ
+                if (month === '2024-08') {
+                    console.log(`${month}: 境界=${monthlyData[month].boundary}, 前月最大=${previousMax}`);
+                    console.log(`初診数: ${monthlyData[month].firstVisits.length}`);
                 }
                 
                 previousMax = monthlyData[month].maxPatientNumber;
@@ -893,6 +875,12 @@
                         }
                     }
                 });
+                
+                // デバッグ用ログ（8月の純初診数）
+                if (month === '2024-08') {
+                    console.log(`純初診数: ${monthlyData[month].pureFirst.length}`);
+                    console.log(`再初診数: ${monthlyData[month].reFirst.length}`);
+                }
                 
                 // 地域別集計
                 monthlyData[month].regional = analyzeRegional(monthlyData[month].pureFirst, monthlyData[month].reFirst);

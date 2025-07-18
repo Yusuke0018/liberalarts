@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>7月・8月データ確認</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+    <h1>7月・8月データ確認</h1>
+    <input type="file" id="fileInput" accept=".csv">
+    <div id="output"></div>
+    
+    <script>
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            Papa.parse(file, {
+                header: true,
+                encoding: 'Shift-JIS',
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    analyzeJulyAugust(results.data);
+                }
+            });
+        });
+        
+        function analyzeJulyAugust(data) {
+            const output = document.getElementById('output');
+            let html = '<h2>分析結果</h2>';
+            
+            // 7月と8月のデータを抽出
+            const julyFirst = [];
+            const augustFirst = [];
+            
+            data.forEach(row => {
+                if (!row['日付'] || !row['初診・再診']) return;
+                
+                const dateStr = row['日付'];
+                
+                if (dateStr.startsWith('2024/07') && row['初診・再診'] === '初診') {
+                    julyFirst.push(row['患者番号']);
+                } else if (dateStr.startsWith('2024/08') && row['初診・再診'] === '初診') {
+                    augustFirst.push(row['患者番号']);
+                }
+            });
+            
+            // ソート
+            julyFirst.sort((a, b) => a - b);
+            augustFirst.sort((a, b) => a - b);
+            
+            const julyMax = Math.max(...julyFirst);
+            const augustMin = Math.min(...augustFirst);
+            const augustMax = Math.max(...augustFirst);
+            
+            html += '<h3>7月の初診</h3>';
+            html += `<p>患者数: ${julyFirst.length}人</p>`;
+            html += `<p>最小番号: ${Math.min(...julyFirst)}</p>`;
+            html += `<p>最大番号: ${julyMax}</p>`;
+            html += `<p>患者番号範囲: ${Math.min(...julyFirst)} - ${julyMax}</p>`;
+            
+            html += '<h3>8月の初診</h3>';
+            html += `<p>患者数: ${augustFirst.length}人</p>`;
+            html += `<p>最小番号: ${augustMin}</p>`;
+            html += `<p>最大番号: ${augustMax}</p>`;
+            html += `<p>患者番号範囲: ${augustMin} - ${augustMax}</p>`;
+            
+            // 境界計算
+            const boundary = julyMax + 1;
+            html += '<h3>境界計算</h3>';
+            html += `<p>7月最大番号: ${julyMax}</p>`;
+            html += `<p>計算された境界: ${boundary}</p>`;
+            
+            // 8月の純初診・再初診
+            const augustPure = augustFirst.filter(n => n >= boundary);
+            const augustRe = augustFirst.filter(n => n < boundary);
+            
+            html += '<h3>8月の分類結果</h3>';
+            html += `<p>純初診（${boundary}以上）: ${augustPure.length}人</p>`;
+            html += `<p>再初診（${boundary}未満）: ${augustRe.length}人</p>`;
+            html += `<p>純初診率: ${(augustPure.length / augustFirst.length * 100).toFixed(1)}%</p>`;
+            
+            // 詳細表示
+            html += '<h3>8月の純初診患者番号（最初の20件）</h3>';
+            html += '<p>' + augustPure.slice(0, 20).join(', ') + '...</p>';
+            
+            html += '<h3>8月の再初診患者番号（最初の20件）</h3>';
+            html += '<p>' + augustRe.slice(0, 20).join(', ') + '...</p>';
+            
+            output.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
